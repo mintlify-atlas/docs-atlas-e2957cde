@@ -1,0 +1,180 @@
+---
+title: "Selecting a Restaurant"
+description: "Learn how to browse and select restaurants in the reservation system"
+icon: "store"
+---
+
+## Overview
+
+The Restaurant Selection screen is the entry point to the reservation system. Here you can browse available restaurants, view their basic information, and choose where you'd like to make a reservation.
+
+**Source:** `lib/presentacion/pantalla_inicio/pantalla_inicio_screen.dart`
+
+## Accessing Restaurant Selection
+
+When you open the application, you'll automatically land on the restaurant selection screen at the `/` route.
+
+## Features
+
+### Browse Restaurants
+
+The main screen displays a scrollable list of all registered restaurants in the system.
+
+<CardGroup cols={2}>
+  <Card title="Restaurant Cards" icon="rectangle-list">
+    Each restaurant is displayed in an interactive card with key information
+  </Card>
+  <Card title="Quick Navigation" icon="arrow-pointer">
+    Tap any restaurant card to view details or make a reservation
+  </Card>
+</CardGroup>
+
+### Restaurant Card Information
+
+Each restaurant card displays:
+
+- **Restaurant Name**: The business name
+- **Icon**: Visual identifier for the restaurant
+- **Specialty**: Type of cuisine or restaurant category
+- **Description**: Brief overview of the restaurant
+
+### Business Owner Access
+
+At the top of the screen, there's a **"¿Tienes un negocio?"** (Do you have a business?) button that provides access to:
+
+<Steps>
+  <Step title="Register New Business">
+    Opens a registration wizard for new restaurant owners
+  </Step>
+  <Step title="Login to Existing Business">
+    Direct login for existing business owners to access their admin panel
+  </Step>
+</Steps>
+
+## State Management
+
+The screen uses `PantallaInicioCubit` to manage the restaurant listing state.
+
+**Source:** `lib/presentacion/pantalla_inicio/pantalla_inicio_cubit.dart`
+
+### States
+
+```dart
+// Initial state when screen loads
+class PantallaInicioInicial extends PantallaInicioState {}
+
+// Loading restaurants from Firestore
+class PantallaInicioCargando extends PantallaInicioState {}
+
+// Successfully loaded restaurants
+class PantallaInicioExitoso extends PantallaInicioState {
+  final List<Negocio> negocios;
+}
+
+// Error loading restaurants
+class PantallaInicioConError extends PantallaInicioState {
+  final String mensaje;
+}
+```
+
+### Loading Restaurants
+
+When the screen initializes, it loads all available restaurants:
+
+```dart
+final cubit = getIt<PantallaInicioCubit>();
+cubit.cargarNegocios(); // Loads all restaurants from Firestore
+```
+
+## User Flow
+
+<Steps>
+  <Step title="Open Application">
+    The app opens to the restaurant selection screen
+  </Step>
+  
+  <Step title="View Restaurant List">
+    Browse through available restaurants displayed as cards
+  </Step>
+  
+  <Step title="Select Restaurant">
+    Tap a restaurant card to proceed
+  </Step>
+  
+  <Step title="Navigate to Details">
+    Automatically redirects to the restaurant details screen
+  </Step>
+</Steps>
+
+## Business Owner Registration
+
+Business owners can register a new restaurant through the registration wizard:
+
+<Accordion title="Registration Steps">
+  1. **Business Information**: Name, contact details, address
+  2. **Authentication Setup**: Email and password configuration
+  3. **Restaurant Details**: Specialty, description, operating hours
+  4. **Initial Configuration**: Default settings and preferences
+</Accordion>
+
+The registration flow uses the `RegistroNegocioStepper` widget component.
+
+**Source:** `lib/presentacion/widgets_comunes/registro_negocio_stepper.dart`
+
+## Navigation Routes
+
+```dart
+GoRoute(
+  path: '/',
+  name: 'home',
+  builder: (context, state) {
+    return BlocProvider(
+      create: (context) => getIt<PantallaInicioCubit>(),
+      child: const PantallaInicioScreen(),
+    );
+  },
+)
+```
+
+## Integration Points
+
+### From Restaurant Selection
+
+Users can navigate to:
+
+- **Restaurant Details** (`/restaurante`) - View detailed restaurant information
+- **Business Admin Panel** (`/dueno`) - For restaurant owners
+- **Registration Flow** - For new business owners
+
+### Data Source
+
+Restaurants are loaded from the `NegocioRepositorio`:
+
+```dart
+final negocios = await negocioRepositorio.obtenerTodosLosNegocios();
+```
+
+## UI Components
+
+The screen uses several custom widgets:
+
+- `IconoCircular` - Displays restaurant icons in circular frames
+- `RegistroNegocioStepper` - Multi-step registration wizard
+- Material Design Cards - For restaurant listing
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Restaurant Details" href="/customers/restaurant-details">
+    Learn about viewing restaurant information
+  </Card>
+  <Card title="Making Reservations" href="/customers/making-reservations">
+    How to book a table once you've selected a restaurant
+  </Card>
+  <Card title="Business Registration" href="/owners/authentication">
+    Complete guide for restaurant owners
+  </Card>
+  <Card title="PantallaInicioCubit" href="/api/state/pantalla-inicio-cubit">
+    State management API reference
+  </Card>
+</CardGroup>

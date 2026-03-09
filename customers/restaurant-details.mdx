@@ -1,0 +1,237 @@
+---
+title: "Restaurant Details"
+description: "View detailed information about a restaurant before making a reservation"
+icon: "utensils"
+---
+
+## Overview
+
+The Restaurant Details screen (PantallaRestaurante) provides comprehensive information about a selected restaurant, including its story, specialties, and quick access to key features like making reservations.
+
+**Source:** `lib/presentacion/pantalla_restaurante/pantalla_restaurante_screen.dart`
+
+## Accessing Restaurant Details
+
+Navigate to this screen by:
+1. Selecting a restaurant from the home screen
+2. Using the `/restaurante` route with a `negocioId` parameter
+
+```dart
+context.go('/restaurante', extra: negocioId);
+```
+
+## Screen Sections
+
+### Restaurant Header
+
+Displays essential restaurant information:
+
+- **Name**: Restaurant business name
+- **Icon**: Visual identifier (circular icon)
+- **Specialty**: Type of cuisine or category
+- **Back Button**: Returns to restaurant selection
+
+### Quick Action Menu
+
+Provides fast access to main features through action cards:
+
+<CardGroup cols={2}>
+  <Card title="Ver Historia" icon="book">
+    View the restaurant's history and story
+  </Card>
+  <Card title="Disponibilidad" icon="calendar-check">
+    Check table availability and make reservations
+  </Card>
+  <Card title="Mis Reservas" icon="list">
+    View and manage your existing reservations
+  </Card>
+  <Card title="Información" icon="circle-info">
+    View detailed restaurant information
+  </Card>
+</CardGroup>
+
+## Restaurant Information Section
+
+### Basic Details
+
+The information card displays:
+
+```dart
+final negocio = state.negocio;
+
+// Displayed information:
+- Name: negocio.nombre
+- Specialty: negocio.especialidad
+- Address: negocio.direccion
+- Phone: negocio.telefono
+- Email: negocio.email
+- Description: negocio.descripcion
+```
+
+### Contact Information
+
+- **Phone Number**: Tappable link to call the restaurant
+- **Email**: Tappable link to send an email
+- **Address**: Full street address for navigation
+
+## State Management
+
+Uses `PantallaRestauranteCubit` to manage restaurant data loading.
+
+**Source:** `lib/presentacion/pantalla_restaurante/pantalla_restaurante_cubit.dart`
+
+### States
+
+```dart
+// Initial state
+class PantallaRestauranteInicial extends PantallaRestauranteState {}
+
+// Loading restaurant data
+class PantallaRestauranteCargando extends PantallaRestauranteState {}
+
+// Successfully loaded
+class PantallaRestauranteExitoso extends PantallaRestauranteState {
+  final Negocio negocio;
+}
+
+// Error loading data
+class PantallaRestauranteConError extends PantallaRestauranteState {
+  final String mensaje;
+}
+```
+
+### Loading Restaurant Data
+
+When the screen initializes:
+
+```dart
+final cubit = PantallaRestauranteCubit();
+cubit.cargarDatosNegocio(negocioId: negocioId);
+```
+
+This fetches the restaurant details from Firestore via `NegocioRepositorio`.
+
+## User Actions
+
+### Navigate to Availability
+
+Tapping the "Disponibilidad" card navigates to the availability screen:
+
+```dart
+context.go('/disponibilidad', extra: idNegocioActual);
+```
+
+### View Restaurant History
+
+Tapping "Ver Historia" navigates to the history screen:
+
+```dart
+context.go('/historia', extra: idNegocioActual);
+```
+
+### View My Reservations
+
+Tapping "Mis Reservas" navigates to reservations:
+
+```dart
+context.go('/mis-reservas', extra: idNegocioActual);
+```
+
+## Navigation Route
+
+```dart
+GoRoute(
+  path: '/restaurante',
+  name: 'restaurante',
+  builder: (context, state) {
+    final negocioId = state.extra as String?;
+    return PantallaRestauranteScreen(negocioId: negocioId);
+  },
+)
+```
+
+## UI Components
+
+### Custom Widgets
+
+- **IconoCircular**: Displays restaurant icon in a circular frame
+- **Action Cards**: Material Design elevated buttons with icons
+- **Information Card**: Collapsible section with full restaurant details
+
+### Layout Structure
+
+```
+AppBar (with back button)
+└── ScrollView
+    ├── Restaurant Header (Icon + Name + Specialty)
+    ├── Action Menu Grid (2x2 cards)
+    └── Information Card (expandable)
+```
+
+## Data Flow
+
+<Steps>
+  <Step title="Initialize Screen">
+    Screen receives `negocioId` parameter
+  </Step>
+  
+  <Step title="Load Data">
+    Cubit fetches restaurant from Firestore
+  </Step>
+  
+  <Step title="Display Information">
+    UI rebuilds with restaurant data
+  </Step>
+  
+  <Step title="Enable Actions">
+    All navigation buttons become active
+  </Step>
+</Steps>
+
+## Error Handling
+
+If the restaurant data fails to load:
+
+```dart
+if (state is PantallaRestauranteConError) {
+  // Shows error message
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(state.mensaje))
+  );
+}
+```
+
+Default values are used until data loads:
+- Name: "Restaurante"
+- Specialty: "Gastronomía"
+
+## Integration with Other Features
+
+### Availability Check
+
+Passes the `negocioId` to the availability screen for table search within this specific restaurant.
+
+### Reservation Management
+
+Filters reservations to show only those for this restaurant.
+
+### Restaurant History
+
+Loads and displays the custom history content configured by the restaurant owner.
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Restaurant Selection" href="/customers/restaurant-selection">
+    How to browse and select restaurants
+  </Card>
+  <Card title="Restaurant History" href="/customers/restaurant-history">
+    View restaurant story and specialties
+  </Card>
+  <Card title="Checking Availability" href="/customers/checking-availability">
+    Find and book available tables
+  </Card>
+  <Card title="Negocio Entity" href="/api/entities/negocio">
+    Restaurant data structure reference
+  </Card>
+</CardGroup>

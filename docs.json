@@ -39,8 +39,11 @@
           {
             "group": "For Customers",
             "pages": [
-              "customers/making-reservations",
+              "customers/restaurant-selection",
+              "customers/restaurant-details",
+              "customers/restaurant-history",
               "customers/checking-availability",
+              "customers/making-reservations",
               "customers/managing-reservations",
               "customers/sms-verification"
             ]
@@ -120,6 +123,8 @@
           {
             "group": "State Management",
             "pages": [
+              "api/state/pantalla-inicio-cubit",
+              "api/state/pantalla-restaurante-cubit",
               "api/state/disponibilidad-cubit",
               "api/state/mis-reservas-cubit",
               "api/state/pantalla-dueno-cubit"

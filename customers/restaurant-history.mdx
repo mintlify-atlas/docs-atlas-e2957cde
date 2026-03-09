@@ -1,0 +1,269 @@
+---
+title: "Restaurant History"
+description: "Explore a restaurant's story, heritage, and signature dishes"
+icon: "book-open"
+---
+
+## Overview
+
+The Restaurant History screen displays the rich story, heritage, and specialty dishes of a restaurant. This feature helps customers learn about the restaurant's background before making a reservation.
+
+**Source:** `lib/presentacion/historia/historia_screen.dart`
+
+## Accessing Restaurant History
+
+Navigate to this screen by:
+1. Tapping "Ver Historia" from the Restaurant Details screen
+2. Using the `/historia` route with a `negocioId` parameter
+
+```dart
+context.go('/historia', extra: negocioId);
+```
+
+## Content Sections
+
+### Restaurant Story
+
+The main content area displays the restaurant's narrative in multiple paragraphs, configured by the business owner.
+
+```dart
+final historia = HistoriaRestaurante(
+  titulo: "Nuestra Historia",
+  subtitulo: "Tradición y Sabor",
+  parrafosHistoria: [
+    "Fundado en 1985, nuestro restaurante...",
+    "A lo largo de tres décadas...",
+    "Hoy seguimos comprometidos..."
+  ],
+  especialidades: [...] // Signature dishes
+);
+```
+
+### Header Section
+
+- **Title**: Main heading (e.g., "Nuestra Historia")
+- **Subtitle**: Supporting tagline (e.g., "Tradición y Sabor")
+- **Restaurant Icon**: Visual identifier
+
+### Story Paragraphs
+
+The restaurant's narrative is presented as a series of well-formatted paragraphs with:
+- Comfortable line spacing
+- Readable typography
+- Smooth scrolling for longer stories
+
+### Specialty Dishes
+
+At the bottom of the history, the restaurant's signature dishes are showcased:
+
+<CardGroup cols={2}>
+  <Card title="Dish Name" icon="utensils">
+    Each specialty includes an icon, name, and description
+  </Card>
+  <Card title="Visual Icons" icon="icons">
+    Material Design icons represent each dish type
+  </Card>
+</CardGroup>
+
+## Data Structure
+
+### HistoriaRestaurante Entity
+
+**Source:** `lib/dominio/entidades/historia_restaurante.dart`
+
+```dart
+class HistoriaRestaurante {
+  final String titulo;
+  final String subtitulo;
+  final List<String> parrafosHistoria;
+  final List<EspecialidadItem> especialidades;
+}
+```
+
+### EspecialidadItem
+
+Each specialty dish includes:
+
+```dart
+class EspecialidadItem {
+  final String nombre;        // Dish name
+  final String descripcion;   // Description
+  final IconData icono;       // Material icon
+}
+```
+
+### Default Content
+
+If no custom history is configured, the system displays default content from `HistoriaData`:
+
+**Source:** `lib/dominio/entidades/historia_restaurante.dart:57`
+
+```dart
+static final HistoriaRestaurante porDefecto = HistoriaRestaurante(
+  titulo: 'Nuestra Historia',
+  subtitulo: 'Pasión por la Gastronomía',
+  parrafosHistoria: [
+    'Bienvenido a nuestro restaurante...',
+    'Cada plato es preparado con dedicación...',
+  ],
+  especialidades: [
+    EspecialidadItem(
+      nombre: 'Platos Tradicionales',
+      descripcion: 'Recetas de familia...',
+      icono: Icons.restaurant,
+    ),
+    // More specialties...
+  ],
+);
+```
+
+## UI Layout
+
+### Visual Structure
+
+```
+AppBar (Restaurant name + Back button)
+└── ScrollView
+    ├── Header Card
+    │   ├── Restaurant Icon (circular)
+    │   ├── Title
+    │   └── Subtitle
+    ├── Story Section
+    │   └── Paragraph List
+    └── Specialties Section
+        └── Specialty Cards Grid
+```
+
+### Specialty Display
+
+Each specialty is shown in an attractive card with:
+- **Icon**: Visual representation of the dish type
+- **Name**: Bold dish name
+- **Description**: Details about the specialty
+
+## Navigation Route
+
+```dart
+GoRoute(
+  path: '/historia',
+  name: 'historia',
+  builder: (context, state) {
+    final negocioId = state.extra as String?;
+    return HistoriaScreen(negocioId: negocioId);
+  },
+)
+```
+
+## Loading Data
+
+The history content is loaded from Firestore:
+
+```dart
+// Via HistoriaRepositorio
+final historia = await historiaRepo.obtenerHistoria(negocioId);
+
+// If no custom history exists, uses default
+if (historia == null) {
+  return HistoriaData.porDefecto;
+}
+```
+
+**Source:** `lib/dominio/repositorios/historia_repositorio.dart`
+
+## Business Owner Configuration
+
+Restaurant owners can customize their history through the admin panel:
+
+<Steps>
+  <Step title="Access Admin Panel">
+    Login to business owner dashboard
+  </Step>
+  
+  <Step title="Navigate to History Section">
+    Find "Actualizar Historia" option
+  </Step>
+  
+  <Step title="Edit Content">
+    Update title, subtitle, story paragraphs, and specialties
+  </Step>
+  
+  <Step title="Save Changes">
+    Changes are stored in Firestore and displayed immediately
+  </Step>
+</Steps>
+
+## Icon Options for Specialties
+
+Common icons used for dishes:
+
+| Icon | Use Case |
+|------|----------|
+| `restaurant` | General dishes, traditional food |
+| `local_pizza` | Pizza, Italian cuisine |
+| `cake` | Desserts, pastries |
+| `local_bar` | Drinks, cocktails |
+| `coffee` | Coffee, breakfast items |
+| `soup_kitchen` | Soups, comfort food |
+
+**Full icon reference:** [HistoriaRestaurante Entity](/api/entities/historia-restaurante#available-icons)
+
+## Use Cases
+
+### For Customers
+
+- Learn about the restaurant's heritage before booking
+- Discover signature dishes and specialties
+- Understand the restaurant's culinary philosophy
+- Get excited about the dining experience
+
+### For Restaurant Owners
+
+- Showcase unique story and differentiation
+- Highlight signature dishes
+- Build emotional connection with customers
+- Increase reservation conversion
+
+## Example Content
+
+<Accordion title="Sample Restaurant History">
+```dart
+HistoriaRestaurante(
+  titulo: 'La Casa de Mama Rosa',
+  subtitulo: 'Tres Generaciones de Sabor',
+  parrafosHistoria: [
+    'Fundado en 1975 por la Señora Rosa, nuestro restaurante comenzó como un pequeño comedor familiar en el corazón del barrio.',
+    'Con el paso de los años, las recetas tradicionales de la familia se convirtieron en los platos más queridos de la comunidad.',
+    'Hoy, dirigido por sus nietos, seguimos honrando esas tradiciones mientras incorporamos toques modernos.',
+  ],
+  especialidades: [
+    EspecialidadItem(
+      nombre: 'Pasta Casera de la Nonna',
+      descripcion: 'Hecha a mano cada día con la receta original de 1975',
+      icono: Icons.restaurant,
+    ),
+    EspecialidadItem(
+      nombre: 'Tiramisú Tradicional',
+      descripcion: 'El postre secreto de Mama Rosa, famoso en toda la ciudad',
+      icono: Icons.cake,
+    ),
+  ],
+)
+```
+</Accordion>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Restaurant Details" href="/customers/restaurant-details">
+    Return to restaurant overview
+  </Card>
+  <Card title="Making Reservations" href="/customers/making-reservations">
+    Book a table after learning about the restaurant
+  </Card>
+  <Card title="Historia Entity" href="/api/entities/historia-restaurante">
+    Data structure and API reference
+  </Card>
+  <Card title="Business Configuration" href="/owners/business-configuration">
+    How owners customize their history
+  </Card>
+</CardGroup>
