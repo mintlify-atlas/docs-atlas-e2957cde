@@ -1,0 +1,426 @@
+---
+title: 'Table Management'
+description: 'Add, edit, and delete restaurant tables with zone organization'
+icon: 'table-columns'
+---
+
+## Overview
+
+The table management system allows business owners to configure their restaurant's table layout, including table names, capacities, and zone assignments.
+
+## Table Entity Structure
+
+Each table in the system has the following properties:
+
+```dart
+class Mesa {
+  final String id;           // Unique identifier
+  final String nombre;       // Table name (e.g., "Mesa 1", "VIP 5")
+  final int capacidad;       // Number of people the table can seat
+  final String negocioId;    // Restaurant ID this table belongs to
+  final String zona;         // Zone/section (e.g., "Salón", "Terraza")
+}
+```
+
+Implementation: `source/lib/dominio/entidades/mesa.dart`
+
+## Table Capacity Logic
+
+Tables use intelligent capacity matching to optimize seating:
+
+### Capacity Matching Rules
+
+<Steps>
+  <Step title="Minimum capacity check">
+    Table capacity must be **greater than or equal** to the party size
+  </Step>
+  <Step title="Maximum overflow check">
+    Table capacity cannot exceed party size by **more than 3 people**
+  </Step>
+  <Step title="Optimal assignment">
+    This prevents wasting large tables on small parties
+  </Step>
+</Steps>
+
+### Examples
+
+| Table Capacity | Party Size | Can Accommodate? | Reason |
+|----------------|------------|------------------|--------|
+| 4 | 2 | ✅ Yes | Difference is 2 (≤ 3) |
+| 4 | 4 | ✅ Yes | Exact match |
+| 6 | 6 | ✅ Yes | Exact match |
+| 8 | 4 | ❌ No | Difference is 4 (> 3) - table too large |
+| 4 | 5 | ❌ No | Capacity too small |
+| 6 | 3 | ✅ Yes | Difference is 3 (≤ 3) |
+
+```dart
+bool puedeAcomodar(int numeroPersonas) {
+  if (capacidad < numeroPersonas) {
+    return false; // Table too small
+  }
+  
+  if (capacidad > numeroPersonas + 3) {
+    return false; // Table too large, difference > 3
+  }
+  
+  return true; // Table is suitable
+}
+```
+
+Implementation reference: `source/lib/dominio/entidades/mesa.dart:16-30`
+
+## Adding Tables
+
+Business owners can add new tables through the admin panel:
+
+### Add Table Process
+
+```dart
+final cubit = context.read<PantallaDuenoCubit>();
+
+final nuevaMesa = await cubit.agregarMesa(
+  negocioId: 'restaurant_id',
+  nombre: 'Mesa 5',
+  capacidad: 4,
+  zona: 'Terraza',
+);
+
+if (nuevaMesa != null) {
+  print('Table added successfully');
+}
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:262-281`
+
+### Required Information
+
+When adding a table, you must provide:
+
+<AccordionGroup>
+  <Accordion title="Table Name" icon="input-text">
+    A unique identifier for the table within your restaurant
+    
+    **Examples:**
+    - "Mesa 1", "Mesa 2", etc.
+    - "VIP 1", "VIP 2"
+    - "Terraza A", "Terraza B"
+    - "Barra 1"
+  </Accordion>
+  
+  <Accordion title="Capacity" icon="users">
+    Number of people the table can comfortably seat
+    
+    **Common capacities:**
+    - 2 people (couples/small tables)
+    - 4 people (standard tables)
+    - 6 people (family tables)
+    - 8+ people (large groups)
+  </Accordion>
+  
+  <Accordion title="Zone" icon="map-location-dot">
+    The section or area where the table is located
+    
+    **Default zones:**
+    - "Salón" (Main dining room)
+    - "Terraza" (Outdoor patio)
+    
+    **Custom zones:**
+    Owners can define custom zones based on their layout
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+Use consistent naming conventions for tables to make them easier to identify and manage.
+</Tip>
+
+## Editing Tables
+
+Update existing table information:
+
+```dart
+final updatedMesa = mesa.copyWith(
+  nombre: 'Mesa VIP 1',
+  capacidad: 6,
+  zona: 'Salón Principal',
+);
+
+final success = await cubit.actualizarMesa(updatedMesa);
+
+if (success) {
+  print('Table updated successfully');
+}
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:283-290`
+
+### Editable Properties
+
+You can modify:
+- ✅ Table name
+- ✅ Table capacity
+- ✅ Zone assignment
+
+You cannot modify:
+- ❌ Table ID (system-generated)
+- ❌ Business ID (fixed to restaurant)
+
+## Deleting Tables
+
+Remove tables that are no longer in use:
+
+```dart
+final success = await cubit.eliminarMesa(mesaId);
+
+if (success) {
+  print('Table deleted successfully');
+}
+```
+
+<Warning>
+**Before deleting a table**, ensure it has no active reservations. Deleting a table with existing reservations may cause issues with reservation management.
+</Warning>
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:292-299`
+
+## Viewing Restaurant Tables
+
+Retrieve all tables for your restaurant:
+
+```dart
+final mesas = await cubit.obtenerMesasDelNegocio(negocioId);
+
+print('Total tables: ${mesas.length}');
+
+for (var mesa in mesas) {
+  print('${mesa.nombre} - Capacity: ${mesa.capacidad} - Zone: ${mesa.zona}');
+}
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:258-260`
+
+## Zone Management
+
+Zones help organize tables by location or purpose.
+
+### Default Zones
+
+Every restaurant starts with two default zones:
+
+```dart
+final zonas = ['Salón', 'Terraza'];
+```
+
+Implementation reference: `source/lib/dominio/entidades/negocio.dart:35`
+
+### Custom Zones
+
+Business owners can add custom zones to match their layout:
+
+```dart
+final cubit = context.read<PantallaDuenoCubit>();
+
+final nuevasZonas = [
+  'Salón Principal',
+  'Terraza',
+  'Bar',
+  'Área VIP',
+  'Jardín',
+];
+
+final success = await cubit.actualizarZonas(negocio, nuevasZonas);
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:104-116`
+
+### Zone Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Indoor vs Outdoor" icon="house">
+    Separate indoor seating from outdoor terraces or patios
+  </Card>
+  <Card title="VIP Areas" icon="star">
+    Designate special sections for premium seating
+  </Card>
+  <Card title="Bar Seating" icon="wine-glass">
+    Distinguish bar-height seating from dining tables
+  </Card>
+  <Card title="Private Rooms" icon="door-closed">
+    Mark private dining areas or party rooms
+  </Card>
+</CardGroup>
+
+## Firestore Data Structure
+
+Tables are stored in Firestore with the following structure:
+
+```javascript
+mesas/
+  {mesaId}/
+    id: "mesa_abc123"
+    nombre: "Mesa 5"
+    capacidad: 4
+    negocioId: "restaurant_xyz"
+    zona: "Terraza"
+```
+
+The `MesaRepositorio` handles all database operations:
+
+- `agregarMesa(Mesa mesa)` - Add new table
+- `actualizarMesa(Mesa mesa)` - Update existing table
+- `eliminarMesa(String mesaId)` - Delete table
+- `obtenerMesasPorNegocio(String negocioId)` - Get all tables for a restaurant
+- `obtenerMesa(String mesaId)` - Get specific table by ID
+
+Implementation: `source/lib/adaptadores/adaptador_firestore_mesa.dart`
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Consistent Naming" icon="align-left">
+    Use a consistent naming scheme for easy identification:
+    - Number-based: "Mesa 1", "Mesa 2", "Mesa 3"
+    - Zone-based: "Terraza A", "Terraza B"
+    - Type-based: "VIP 1", "Bar 1"
+  </Accordion>
+  
+  <Accordion title="Accurate Capacities" icon="users">
+    Set realistic capacities that match physical table sizes:
+    - Don't overestimate to avoid cramped seating
+    - Consider table shape (round, square, rectangular)
+    - Account for accessibility requirements
+  </Accordion>
+  
+  <Accordion title="Logical Zones" icon="map">
+    Organize zones to match your physical layout:
+    - Use customer-facing zone names
+    - Group similar seating types together
+    - Consider different service areas
+  </Accordion>
+  
+  <Accordion title="Regular Updates" icon="arrows-rotate">
+    Keep table configuration current:
+    - Update when rearranging layout
+    - Remove tables that are permanently retired
+    - Add seasonal seating (outdoor tables)
+  </Accordion>
+</AccordionGroup>
+
+## Common Scenarios
+
+### Scenario 1: Seasonal Patio Tables
+
+For restaurants with seasonal outdoor seating:
+
+<Steps>
+  <Step title="Spring setup">
+    Add patio tables with "Terraza" zone when weather permits
+  </Step>
+  <Step title="Summer operations">
+    Tables are available for reservations throughout the season
+  </Step>
+  <Step title="Fall teardown">
+    Remove or disable patio tables when closing outdoor area
+  </Step>
+</Steps>
+
+### Scenario 2: Event Configuration
+
+For special events requiring table rearrangement:
+
+<Steps>
+  <Step title="Create event zone">
+    Add a custom zone like "Sala de Eventos"
+  </Step>
+  <Step title="Configure tables">
+    Add larger tables or modify capacities for group seating
+  </Step>
+  <Step title="Post-event cleanup">
+    Remove event-specific tables and restore normal configuration
+  </Step>
+</Steps>
+
+### Scenario 3: Renovation
+
+During restaurant renovations:
+
+<Steps>
+  <Step title="Reduce capacity">
+    Temporarily delete or reduce table count in affected areas
+  </Step>
+  <Step title="Mark zones unavailable">
+    Prevent reservations in renovation zones
+  </Step>
+  <Step title="Restore after completion">
+    Re-add tables with updated layout and capacities
+  </Step>
+</Steps>
+
+## Integration with Reservations
+
+Tables integrate directly with the reservation system:
+
+### Availability Checking
+
+When customers search for availability, the system:
+
+1. Retrieves all tables for the restaurant
+2. Filters tables by zone preference (if specified)
+3. Checks table capacity using `puedeAcomodar()`
+4. Verifies no conflicting reservations exist
+5. Returns available table options
+
+### Reservation Assignment
+
+When creating a reservation:
+
+```dart
+final reserva = Reserva(
+  mesaId: mesa.id,        // Link to specific table
+  numeroPersonas: 4,
+  fechaHora: DateTime.now(),
+  // ... other properties
+);
+```
+
+<Info>
+Each reservation is tied to a specific table through the `mesaId` field.
+</Info>
+
+## Troubleshooting
+
+### Problem: Table Not Appearing in Availability
+
+**Possible causes:**
+- Table capacity doesn't match party size within ±3 people rule
+- Table has conflicting reservation at requested time
+- Table zone doesn't match customer filter
+
+**Solution:** Verify table capacity and check existing reservations
+
+### Problem: Cannot Delete Table
+
+**Possible causes:**
+- Table has active or future reservations
+- Database connection issues
+- Insufficient permissions
+
+**Solution:** Cancel or reassign reservations before deleting table
+
+### Problem: Zone Not Displaying
+
+**Possible causes:**
+- Zone list not updated in business configuration
+- Table assigned to non-existent zone
+
+**Solution:** Update business zones in configuration panel
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reservation Management" icon="calendar-check" href="/owners/reservation-management">
+    Learn how to manage customer reservations on your tables
+  </Card>
+  <Card title="Business Configuration" icon="gear" href="/owners/business-configuration">
+    Configure business hours and reservation rules
+  </Card>
+</CardGroup>

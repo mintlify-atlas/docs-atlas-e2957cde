@@ -1,0 +1,205 @@
+---
+title: 'Mesa'
+description: 'Entity representing a restaurant table'
+icon: 'chair'
+---
+
+## Overview
+
+The `Mesa` class represents a physical table in a restaurant. It contains information about the table's capacity, location zone, and provides logic to determine if it can accommodate a given number of guests.
+
+## Class Definition
+
+```dart
+class Mesa {
+  final String id;
+  final String nombre;
+  final int capacidad;
+  final String negocioId;
+  final String zona;
+}
+```
+
+## Properties
+
+<ParamField path="id" type="String" required>
+  Unique identifier for the table
+</ParamField>
+
+<ParamField path="nombre" type="String" required>
+  Display name of the table (e.g., "Mesa 1", "Mesa VIP")
+</ParamField>
+
+<ParamField path="capacidad" type="int" required>
+  Maximum number of people the table can accommodate
+</ParamField>
+
+<ParamField path="negocioId" type="String" required>
+  Identifier of the restaurant this table belongs to
+</ParamField>
+
+<ParamField path="zona" type="String" default="'Salón'">
+  Zone or area where the table is located (e.g., "Salón", "Terraza", "VIP")
+</ParamField>
+
+## Constructor
+
+```dart
+Mesa({
+  required this.id,
+  required this.nombre,
+  required this.capacidad,
+  required this.negocioId,
+  this.zona = 'Salón',
+})
+```
+
+## Methods
+
+### puedeAcomodar()
+
+Determines if the table can accommodate a specific number of people based on capacity optimization rules.
+
+```dart
+bool puedeAcomodar(int numeroPersonas)
+```
+
+**Parameters:**
+- `numeroPersonas` (int) - The number of people to accommodate
+
+**Returns:** `bool` - `true` if the table is suitable, `false` otherwise
+
+**Logic:**
+1. The table **must** have capacity greater than or equal to the number of people
+2. The table **cannot** have more than 3 extra seats (prevents wasting large tables for small groups)
+3. Valid range: `numeroPersonas <= capacidad <= numeroPersonas + 3`
+
+**Example:**
+```dart
+final mesa = Mesa(
+  id: 'mesa-01',
+  nombre: 'Mesa 1',
+  capacidad: 6,
+  negocioId: 'rest-001',
+);
+
+// Examples:
+mesa.puedeAcomodar(4);  // true (6 capacity, 4 people, difference = 2)
+mesa.puedeAcomodar(6);  // true (exact match)
+mesa.puedeAcomodar(7);  // false (not enough capacity)
+mesa.puedeAcomodar(2);  // false (difference = 4, too large)
+mesa.puedeAcomodar(3);  // true (difference = 3, acceptable)
+```
+
+### copyWith()
+
+Creates a copy of the table with specified fields updated.
+
+```dart
+Mesa copyWith({
+  String? id,
+  String? nombre,
+  int? capacidad,
+  String? negocioId,
+  String? zona,
+})
+```
+
+**Returns:** `Mesa` - A new instance with updated fields
+
+**Example:**
+```dart
+final mesaOriginal = Mesa(
+  id: 'mesa-01',
+  nombre: 'Mesa 1',
+  capacidad: 4,
+  negocioId: 'rest-001',
+);
+
+final mesaActualizada = mesaOriginal.copyWith(
+  zona: 'Terraza',
+  capacidad: 6,
+);
+```
+
+## Usage Examples
+
+### Creating a New Table
+
+```dart
+final mesa = Mesa(
+  id: 'mesa-05',
+  nombre: 'Mesa 5',
+  capacidad: 4,
+  negocioId: 'rest-001',
+  zona: 'Salón',
+);
+```
+
+### Creating a VIP Table
+
+```dart
+final mesaVip = Mesa(
+  id: 'vip-01',
+  nombre: 'Mesa VIP',
+  capacidad: 8,
+  negocioId: 'rest-001',
+  zona: 'VIP',
+);
+```
+
+### Checking Table Availability
+
+```dart
+final mesa = Mesa(
+  id: 'mesa-01',
+  nombre: 'Mesa 1',
+  capacidad: 6,
+  negocioId: 'rest-001',
+  zona: 'Terraza',
+);
+
+final numeroPersonas = 5;
+
+if (mesa.puedeAcomodar(numeroPersonas)) {
+  print('Mesa ${mesa.nombre} puede acomodar a $numeroPersonas personas');
+} else {
+  print('Mesa ${mesa.nombre} no es adecuada para $numeroPersonas personas');
+}
+```
+
+### Finding Suitable Tables
+
+```dart
+final mesas = [
+  Mesa(id: '1', nombre: 'Mesa 1', capacidad: 2, negocioId: 'rest-001'),
+  Mesa(id: '2', nombre: 'Mesa 2', capacidad: 4, negocioId: 'rest-001'),
+  Mesa(id: '3', nombre: 'Mesa 3', capacidad: 6, negocioId: 'rest-001'),
+  Mesa(id: '4', nombre: 'Mesa 4', capacidad: 8, negocioId: 'rest-001'),
+];
+
+final numeroPersonas = 5;
+
+final mesasAdecuadas = mesas
+  .where((mesa) => mesa.puedeAcomodar(numeroPersonas))
+  .toList();
+
+print('Mesas disponibles para $numeroPersonas personas:');
+for (final mesa in mesasAdecuadas) {
+  print('- ${mesa.nombre} (capacidad: ${mesa.capacidad})');
+}
+// Output: Mesa 3 (capacidad: 6) and Mesa 4 (capacidad: 8)
+```
+
+## Capacity Optimization Rules
+
+The `puedeAcomodar()` method implements smart capacity matching:
+
+| Table Capacity | Can Accommodate | Cannot Accommodate |
+|----------------|-----------------|--------------------|
+| 2              | 2               | 1, 3+              |
+| 4              | 1, 2, 3, 4      | 5+                 |
+| 6              | 3, 4, 5, 6      | 1, 2, 7+           |
+| 8              | 5, 6, 7, 8      | 1-4, 9+            |
+
+This ensures optimal table utilization and prevents wasting large tables on small groups.

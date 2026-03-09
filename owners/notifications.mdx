@@ -1,0 +1,535 @@
+---
+title: 'Email Notification System'
+description: 'Understand the automated email notification system for customers and business owners'
+icon: 'envelope'
+---
+
+## Overview
+
+The Restaurant Reservation System uses a comprehensive email notification system to keep both customers and business owners informed about reservation activities. All notifications are sent automatically using Firebase's Trigger Email Extension.
+
+## Email Service Architecture
+
+### Implementation
+
+The `ServicioEmail` class handles all email operations:
+
+```dart
+class ServicioEmail {
+  // Email templates and sending logic
+}
+```
+
+Implementation: `source/lib/adaptadores/servicio_email.dart`
+
+### Firebase Integration
+
+Emails are sent through Firebase Firestore triggers:
+
+<Steps>
+  <Step title="Add to Firestore">
+    Email data is written to the `mail` collection
+  </Step>
+  <Step title="Extension triggers">
+    Firebase Trigger Email Extension detects new document
+  </Step>
+  <Step title="SMTP delivery">
+    Extension sends email via configured SMTP provider
+  </Step>
+  <Step title="Status update">
+    Delivery status is written back to Firestore document
+  </Step>
+</Steps>
+
+```dart
+await FirebaseFirestore.instance.collection('mail').add({
+  'to': [recipientEmail],
+  'message': {
+    'subject': emailSubject,
+    'html': htmlContent,
+  },
+  'createdAt': FieldValue.serverTimestamp(),
+});
+```
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:368-398`
+
+<Info>
+The Firebase Trigger Email Extension must be installed and configured for emails to be delivered. See the [Email Configuration Guide](/guides/email-configuration).
+</Info>
+
+## Customer Notifications
+
+Customers receive automated emails for all reservation activities.
+
+### Reservation Confirmed
+
+Sent when a customer successfully creates a reservation:
+
+```dart
+await servicioEmail.enviarReservaConfirmada(
+  emailCliente: 'customer@email.com',
+  nombreCliente: 'John Doe',
+  nombreNegocio: 'La Cocina',
+  fechaHora: DateTime(2026, 3, 15, 19, 0),
+  nombreMesa: 'Mesa 5',
+  numeroPersonas: 4,
+);
+```
+
+**Email includes:**
+- ✅ Confirmation badge with green styling
+- 📋 Complete reservation details table
+- 💡 Important reminders:
+  - Arrive 10 minutes early
+  - Cancellation policy (2 hours advance notice)
+  - Save email for reference
+- 📧 Restaurant contact information
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:18-72`
+
+### Customer Cancellation Confirmation
+
+Sent when a customer cancels their own reservation:
+
+```dart
+await servicioEmail.enviarReservaCanceladaPorCliente(
+  emailCliente: 'customer@email.com',
+  nombreCliente: 'John Doe',
+  nombreNegocio: 'La Cocina',
+  fechaHora: DateTime(2026, 3, 15, 19, 0),
+  nombreMesa: 'Mesa 5',
+  numeroPersonas: 4,
+);
+```
+
+**Email includes:**
+- ❌ Cancellation confirmation with red accent
+- 📋 Cancelled reservation details
+- 🔄 Invitation to book again
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:75-116`
+
+### Restaurant Cancellation Notice
+
+Sent when the restaurant cancels a customer's reservation:
+
+```dart
+await servicioEmail.enviarReservaCanceladaPorRestaurante(
+  emailCliente: 'customer@email.com',
+  nombreCliente: 'John Doe',
+  nombreNegocio: 'La Cocina',
+  fechaHora: DateTime(2026, 3, 15, 19, 0),
+  nombreMesa: 'Mesa 5',
+  numeroPersonas: 4,
+  motivo: 'Table unavailable due to unexpected maintenance',
+);
+```
+
+**Email includes:**
+- ⚠️ Cancellation notice with warning styling
+- 📋 Original reservation details
+- 📝 Reason for cancellation (if provided)
+- 🙏 Apology for inconvenience
+- 🔄 Invitation to rebook
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:119-175`
+
+<Tip>
+Always provide a clear, professional reason when cancelling customer reservations. This helps maintain customer trust and goodwill.
+</Tip>
+
+## Business Owner Notifications
+
+Restaurant owners receive notifications for customer reservation activities.
+
+### New Reservation Alert
+
+Sent when a customer creates a new reservation:
+
+```dart
+await servicioEmail.enviarNuevaReservaAlDueno(
+  emailDueno: 'owner@restaurant.com',
+  nombreCliente: 'John Doe',
+  emailCliente: 'customer@email.com',
+  telefonoCliente: '+54 9 261 123-4567',
+  fechaHora: DateTime(2026, 3, 15, 19, 0),
+  nombreMesa: 'Mesa 5',
+  numeroPersonas: 4,
+  nombreNegocio: 'La Cocina',
+);
+```
+
+**Email includes:**
+- 📋 "Nueva Reserva Recibida" header
+- 👤 Customer contact information (email and phone)
+- 📅 Complete reservation details
+- 🏪 Restaurant name
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:182-222`
+
+### Customer Cancellation Alert
+
+Sent when a customer cancels their reservation:
+
+```dart
+await servicioEmail.enviarCancelacionClienteAlDueno(
+  emailDueno: 'owner@restaurant.com',
+  nombreCliente: 'John Doe',
+  fechaHora: DateTime(2026, 3, 15, 19, 0),
+  nombreMesa: 'Mesa 5',
+  numeroPersonas: 4,
+  nombreNegocio: 'La Cocina',
+);
+```
+
+**Email includes:**
+- ❌ "Un cliente ha cancelado su reserva" header
+- 📋 Cancelled reservation details
+- ℹ️ Note that table is now available
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:225-258`
+
+<Info>
+Business owners do NOT receive email notifications when they cancel reservations themselves, as they performed the action directly.
+</Info>
+
+## Email Templates
+
+All emails use a consistent HTML template with responsive design.
+
+### Template Structure
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: white;">
+    
+    <!-- Header -->
+    <div style="background-color: #27AE60; padding: 30px; text-align: center;">
+      <h1 style="color: white; margin: 0;">✅ Reserva Confirmada</h1>
+    </div>
+
+    <!-- Content -->
+    <div style="padding: 30px;">
+      <!-- Email content here -->
+    </div>
+
+    <!-- Footer -->
+    <div style="background-color: #f5f5f5; padding: 20px; text-align: center;">
+      <p style="color: #666; font-size: 12px;">
+        © 2026 Sistema de Reservas
+      </p>
+      <p style="color: #999; font-size: 11px;">
+        Este es un email automático, por favor no respondas a este mensaje.
+      </p>
+    </div>
+
+  </div>
+</body>
+</html>
+```
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:401-436`
+
+### Color Scheme
+
+| Color | Usage | Hex Code |
+|-------|-------|----------|
+| Green | Confirmation, success | `#27AE60` |
+| Red | Cancellation | `#F44336` |
+| Orange | Warning, restaurant cancellation | `#FF9800` |
+| Gray | Neutral information | `#666666` |
+
+### Reservation Details Table
+
+All emails include a formatted details table:
+
+```html
+<table style="width: 100%; border-collapse: collapse;">
+  <tr>
+    <td style="padding: 12px 0; color: #666;">👤 Nombre:</td>
+    <td style="padding: 12px 0; font-weight: bold;">John Doe</td>
+  </tr>
+  <tr>
+    <td style="color: #666;">🏪 Restaurante:</td>
+    <td style="font-weight: bold;">La Cocina</td>
+  </tr>
+  <tr>
+    <td style="color: #666;">📍 Mesa:</td>
+    <td style="font-weight: bold;">Mesa 5</td>
+  </tr>
+  <tr>
+    <td style="color: #666;">📅 Fecha:</td>
+    <td style="font-weight: bold;">viernes 15 de marzo de 2026</td>
+  </tr>
+  <tr>
+    <td style="color: #666;">🕐 Horario:</td>
+    <td style="font-weight: bold;">19:00 hs</td>
+  </tr>
+  <tr>
+    <td style="color: #666;">👥 Personas:</td>
+    <td style="font-weight: bold;">4</td>
+  </tr>
+</table>
+```
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:439-498`
+
+## Date and Time Formatting
+
+Dates and times are formatted in Spanish:
+
+### Date Format
+
+```dart
+String _formatearFecha(DateTime fecha) {
+  // "viernes 15 de marzo de 2026"
+  final diaSemana = dias[fecha.weekday - 1];
+  final dia = fecha.day;
+  final mes = meses[fecha.month - 1];
+  final anio = fecha.year;
+  
+  return '$diaSemana $dia de $mes de $anio';
+}
+```
+
+**Examples:**
+- `lunes 10 de marzo de 2026`
+- `viernes 15 de marzo de 2026`
+- `domingo 20 de diciembre de 2026`
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:501-532`
+
+### Time Format
+
+```dart
+String _formatearHora(DateTime fecha) {
+  // "19:00 hs"
+  final hora = fecha.hour.toString().padLeft(2, '0');
+  final minuto = fecha.minute.toString().padLeft(2, '0');
+  return '$hora:$minuto hs';
+}
+```
+
+**Examples:**
+- `12:00 hs`
+- `19:30 hs`
+- `21:45 hs`
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:534-538`
+
+## Using Email Service
+
+### With Reserva Entity
+
+Convenience methods accept `Reserva` objects directly:
+
+```dart
+final servicioEmail = ServicioEmail();
+
+// Notify customer of confirmed reservation
+await servicioEmail.notificarReservaConfirmada(
+  reserva,
+  nombreNegocio: 'La Cocina',
+  nombreMesa: 'Mesa 5',
+  emailDueno: 'owner@restaurant.com',
+);
+```
+
+This automatically:
+- Sends confirmation email to customer
+- Sends new reservation alert to owner
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:265-300`
+
+### Customer Cancellation
+
+```dart
+await servicioEmail.notificarReservaCanceladaPorCliente(
+  reserva,
+  nombreNegocio: 'La Cocina',
+  nombreMesa: 'Mesa 5',
+  emailDueno: 'owner@restaurant.com',
+);
+```
+
+This automatically:
+- Sends cancellation confirmation to customer
+- Sends cancellation alert to owner
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:303-335`
+
+### Restaurant Cancellation
+
+```dart
+await servicioEmail.notificarReservaCanceladaPorRestaurante(
+  reserva,
+  nombreNegocio: 'La Cocina',
+  nombreMesa: 'Mesa 5',
+  motivo: 'Unexpected maintenance required',
+);
+```
+
+This sends cancellation notice to customer only.
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:338-359`
+
+## Email Validation
+
+The system validates email addresses before sending:
+
+```dart
+final email = reserva.contactoCliente;
+if (email == null || !email.contains('@')) {
+  print('⚠️ No se puede enviar email: contacto no es email válido');
+  return;
+}
+```
+
+<Warning>
+If a customer's `contactoCliente` field is missing or invalid, email notifications will not be sent. Always validate customer contact information.
+</Warning>
+
+## Firestore Email Collection
+
+Emails are stored in Firestore for tracking:
+
+```javascript
+mail/
+  {emailId}/
+    to: ["customer@email.com"]
+    message:
+      subject: "✅ Reserva confirmada - La Cocina"
+      html: "<html>...</html>"
+    createdAt: Timestamp(2026-03-15 18:45:00)
+    delivery:
+      state: "SUCCESS"  // or "ERROR", "PENDING"
+      attempts: 1
+      startTime: Timestamp(...)
+      endTime: Timestamp(...)
+      error: null
+```
+
+### Delivery States
+
+| State | Description |
+|-------|-------------|
+| `PENDING` | Email queued for delivery |
+| `PROCESSING` | Currently being sent |
+| `SUCCESS` | Delivered successfully |
+| `ERROR` | Delivery failed |
+
+<Info>
+You can monitor email delivery status in the Firebase Console under the `mail` collection.
+</Info>
+
+## Troubleshooting
+
+### Problem: Emails Not Being Sent
+
+**Possible causes:**
+1. Firebase Trigger Email Extension not installed
+2. SMTP credentials not configured
+3. Email quota exceeded
+4. Invalid recipient email address
+
+**Solution:**
+<Steps>
+  <Step title="Check Firebase Extensions">
+    Verify Trigger Email Extension is installed in Firebase Console
+  </Step>
+  <Step title="Verify SMTP Configuration">
+    Ensure SMTP credentials are correctly configured in extension settings
+  </Step>
+  <Step title="Check Firestore">
+    Look for error messages in `mail` collection documents
+  </Step>
+  <Step title="Validate Email">
+    Confirm customer email address is valid and contains '@'
+  </Step>
+</Steps>
+
+### Problem: Emails Going to Spam
+
+**Possible causes:**
+- SMTP server reputation issues
+- Missing SPF/DKIM records
+- Generic "no-reply" sender address
+
+**Solution:**
+- Configure SPF and DKIM records for your domain
+- Use a recognizable sender address
+- Include unsubscribe link (for marketing emails)
+- Test with multiple email providers
+
+### Problem: Duplicate Emails
+
+**Possible causes:**
+- Multiple calls to email service
+- Retry logic triggering unnecessarily
+
+**Solution:**
+- Add idempotency checks
+- Verify email service is called only once per event
+- Check for duplicate reservation confirmations
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Test Before Production" icon="flask">
+    Always test emails before deploying:
+    - Send test emails to yourself
+    - Verify formatting on multiple devices
+    - Check spam folder
+    - Test all notification types
+  </Accordion>
+  
+  <Accordion title="Monitor Delivery" icon="chart-line">
+    Regularly monitor email delivery:
+    - Check Firebase Console for errors
+    - Review `mail` collection delivery states
+    - Track bounce rates
+    - Monitor SMTP quota usage
+  </Accordion>
+  
+  <Accordion title="Maintain Email Quality" icon="star">
+    Keep emails professional and useful:
+    - Clear subject lines
+    - Complete information
+    - Professional tone
+    - Mobile-responsive design
+  </Accordion>
+  
+  <Accordion title="Respect Privacy" icon="shield">
+    Handle customer data responsibly:
+    - Only send relevant notifications
+    - Secure email content
+    - Don't share customer emails
+    - Comply with privacy regulations
+  </Accordion>
+</AccordionGroup>
+
+## Email Configuration
+
+For detailed instructions on setting up the Firebase Trigger Email Extension and SMTP configuration, see:
+
+<Card title="Email Configuration Guide" icon="wrench" href="/guides/email-configuration">
+  Step-by-step guide to configure email delivery with Firebase
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reservation Management" icon="calendar-check" href="/owners/reservation-management">
+    Learn how reservation actions trigger email notifications
+  </Card>
+  <Card title="Business Configuration" icon="gear" href="/owners/business-configuration">
+    Configure your restaurant settings
+  </Card>
+</CardGroup>

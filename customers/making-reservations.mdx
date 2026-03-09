@@ -1,0 +1,473 @@
+---
+title: 'Making Reservations'
+description: 'Step-by-step guide to making a table reservation at the restaurant'
+icon: 'calendar-check'
+---
+
+## Overview
+
+The Restaurant Reservation System allows customers to search for available tables, select their preferred date, time, and zone, and complete a reservation with SMS verification.
+
+<Steps>
+  <Step title="Access the Availability Screen">
+    Navigate to the availability screen to begin searching for tables. The screen loads all available zones and restaurant hours automatically.
+
+    ```dart
+    // From disponibilidad_cubit.dart
+    Future<void> cargarTodasLasMesas([String? negocioId]) async {
+      try {
+        emit(DisponibilidadCargando());
+        
+        // Load tables, business info, and hours in parallel
+        final resultados = await Future.wait([
+          _mesaRepositorio.obtenerMesasPorNegocio(_negocioId!),
+          _negocioRepositorio.obtenerNegocioPorId(_negocioId!),
+          _horarioAperturaRepo.obtenerHorarioPorNegocio(_negocioId!),
+        ]);
+
+        final mesas = resultados[0] as List<Mesa>;
+        _negocioActual = resultados[1] as Negocio?;
+        final horario = resultados[2] as dynamic;
+        
+        emit(DisponibilidadExitosa(mesas, negocio: _negocioActual, horariosServicio: horarios));
+      } catch (e) {
+        emit(DisponibilidadConError('Error al cargar los datos: ${e.toString()}'));
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="View Restaurant Hours">
+    At the top of the screen, you'll see a card displaying the restaurant's hours of operation for each day of the week.
+
+    <Note>
+      The hours card shows:
+      - Operating hours for each day
+      - Days when the restaurant is closed
+      - Important timing information for your reservation
+    </Note>
+
+    ```dart
+    Widget _buildHorariosCard() {
+      return Card(
+        elevation: 6,
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.access_time, color: Colors.white),
+                  Text('Horarios de Atención',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              // Display hours for each day
+              ..._buildHorariosItems(horarios),
+            ],
+          ),
+        ),
+      );
+    }
+    ```
+  </Step>
+
+  <Step title="Select a Zone">
+    Choose your preferred dining area from the available zones. Each zone has a unique icon and color:
+
+    - **Terraza** (Terrace) - Orange deck icon
+    - **Salón** (Main Dining) - Blue chair icon
+    - **Jardín** (Garden) - Green grass icon
+    - **Bar** - Purple bar icon
+    - **VIP** - Gold star icon
+
+    ```dart
+    Widget _buildSelectorZona() {
+      return Card(
+        child: DropdownButton<String>(
+          value: _zonaSeleccionada,
+          hint: const Text('Seleccionar zona'),
+          items: zonas.map((zona) {
+            return DropdownMenuItem<String>(
+              value: zona,
+              child: Row(
+                children: [
+                  Icon(_obtenerIconoZona(zona), color: _obtenerColorZona(zona)),
+                  Text(zona),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: (zona) {
+            setState(() {
+              _zonaSeleccionada = zona;
+            });
+          },
+        ),
+      );
+    }
+    ```
+
+    <Info>
+      The system loads all zones configured for the restaurant, even if they don't currently have tables assigned.
+    </Info>
+  </Step>
+
+  <Step title="Select Date">
+    Choose your reservation date. The date picker allows selections up to 14 days in advance.
+
+    ```dart
+    Widget _buildSelectorFecha() {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.calendar_today),
+          title: const Text('Fecha'),
+          subtitle: Text(_fechaSeleccionada == null
+              ? 'Seleccionar fecha'
+              : '${_fechaSeleccionada!.day}/${_fechaSeleccionada!.month}/${_fechaSeleccionada!.year}'),
+          onTap: () async {
+            final fecha = await showDatePicker(
+              context: context,
+              initialDate: DateTime.now(),
+              firstDate: DateTime.now(),
+              lastDate: DateTime.now().add(const Duration(days: 14)),
+            );
+            if (fecha != null) {
+              setState(() {
+                _fechaSeleccionada = fecha;
+                _intervaloSeleccionado = null; // Clear time selection
+                // Update available time slots
+                _intervalosFuture = context
+                    .read<DisponibilidadCubit>()
+                    .obtenerIntervalosHorarioNegocio(fecha);
+              });
+            }
+          },
+        ),
+      );
+    }
+    ```
+  </Step>
+
+  <Step title="Select Time Slot">
+    After selecting a date, available time slots appear based on the restaurant's hours and interval configuration.
+
+    <Note>
+      Reservations are made in intervals (typically 60 minutes). The duration is configured per restaurant.
+    </Note>
+
+    ```dart
+    Widget _buildSelectorHora() {
+      if (_fechaSeleccionada == null) {
+        return Card(
+          child: Column(
+            children: [
+              Icon(Icons.access_time, size: 48, color: Colors.grey[400]),
+              Text('Selecciona primero una fecha'),
+            ],
+          ),
+        );
+      }
+
+      return Card(
+        child: FutureBuilder<List<String>>(
+          future: _intervalosFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const CircularProgressIndicator();
+            }
+
+            final intervalos = snapshot.data!;
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: intervalos.map((intervalo) {
+                return ChoiceChip(
+                  label: Text(intervalo),
+                  selected: _intervaloSeleccionado == intervalo,
+                  onSelected: (selected) {
+                    setState(() {
+                      _intervaloSeleccionado = selected ? intervalo : null;
+                    });
+                  },
+                );
+              }).toList(),
+            );
+          },
+        ),
+      );
+    }
+    ```
+  </Step>
+
+  <Step title="Set Party Size">
+    Specify the number of people for your reservation using the +/- buttons. You can select from 1 to 20 people.
+
+    ```dart
+    Widget _buildSelectorPersonas() {
+      return Card(
+        child: Row(
+          children: [
+            Icon(Icons.people),
+            Text('Número de Personas:'),
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline),
+              onPressed: () {
+                if (_numeroPersonas > 1) {
+                  setState(() => _numeroPersonas--);
+                }
+              },
+            ),
+            Text('$_numeroPersonas',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              onPressed: () {
+                if (_numeroPersonas < 20) {
+                  setState(() => _numeroPersonas++);
+                }
+              },
+            ),
+          ],
+        ),
+      );
+    }
+    ```
+  </Step>
+
+  <Step title="Search for Available Table">
+    Click the "Buscar Mesa Disponible" button to find an available table matching your criteria.
+
+    ```dart
+    // From disponibilidad_cubit.dart
+    Future<void> buscarMesaEnZona({
+      required String zona,
+      required DateTime fecha,
+      required DateTime hora,
+      required int numeroPersonas,
+    }) async {
+      try {
+        emit(DisponibilidadCargando());
+
+        final negocioId = _negocioActual?.id ?? _negocioId ?? 'default';
+        final mesa = await _mesaRepositorio.buscarMesaDisponibleEnZona(
+          zona: zona,
+          fecha: fecha,
+          hora: hora,
+          numeroPersonas: numeroPersonas,
+          negocioId: negocioId,
+        );
+
+        if (mesa == null) {
+          emit(DisponibilidadConError(
+            'No hay mesas disponibles en $zona para $numeroPersonas personas en ese horario.\n\n'
+            'Intenta con otra zona o un horario diferente.',
+          ));
+        } else {
+          emit(MesaEncontrada(mesa, zona, _negocioActual?.duracionPromedioMinutos ?? 60));
+        }
+      } catch (e) {
+        emit(DisponibilidadConError('Error al buscar mesa: ${e.toString()}'));
+      }
+    }
+    ```
+
+    <Info>
+      The system automatically finds the best available table in your selected zone that can accommodate your party size.
+    </Info>
+  </Step>
+
+  <Step title="Review Table Details">
+    When a table is found, you'll see:
+    - Table name and zone
+    - Table capacity
+    - Summary of your reservation (date, time, party size)
+    - A "Reservar Esta Mesa" button to proceed
+  </Step>
+
+  <Step title="Enter Contact Information">
+    Click "Reservar Esta Mesa" to open the contact information dialog. You'll need to provide:
+
+    - **Your name** (required)
+    - **Phone number** (required for SMS verification)
+    - **Email address** (required for reservation details)
+
+    ```dart
+    void _showConfirmarReservaDialog(BuildContext context, Mesa mesa, DateTime fecha,
+        String intervaloSeleccionado, int numeroPersonas) {
+      final nombreController = TextEditingController();
+      final telefonoController = TextEditingController();
+      final emailController = TextEditingController();
+
+      showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.contact_mail),
+              Text('Datos de Contacto'),
+            ],
+          ),
+          content: Form(
+            child: Column(
+              children: [
+                TextFormField(
+                  controller: nombreController,
+                  decoration: InputDecoration(
+                    labelText: 'Tu nombre *',
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Por favor ingresa tu nombre';
+                    }
+                    return null;
+                  },
+                ),
+                TextFormField(
+                  controller: telefonoController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Teléfono *',
+                    prefixIcon: Icon(Icons.phone_android),
+                    helperText: 'Recibirás un código SMS para confirmar',
+                  ),
+                ),
+                TextFormField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email *',
+                    prefixIcon: Icon(Icons.email),
+                    helperText: 'Recibirás los detalles de tu reserva',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    ```
+
+    <Note>
+      Your phone number will be used for SMS verification, and your email will receive reservation confirmation details.
+    </Note>
+  </Step>
+
+  <Step title="Complete SMS Verification">
+    After entering your contact information, you'll receive an SMS with a verification code. See the [SMS Verification](/customers/sms-verification) page for detailed instructions.
+  </Step>
+
+  <Step title="Confirmation">
+    Once verified, your reservation is created with `confirmada` status and you'll receive:
+    - A success message on screen
+    - An email with full reservation details
+    - An option to view your reservation in "Mis Reservas"
+
+    ```dart
+    // From disponibilidad_cubit.dart
+    Future<void> crearReservaVerificadaPorSMS({
+      required String emailCliente,
+      required String telefonoVerificado,
+      required String? nombreCliente,
+      required String mesaId,
+      required DateTime fecha,
+      required DateTime hora,
+      required int numeroPersonas,
+    }) async {
+      try {
+        emit(ProcesandoReserva());
+
+        // Create reservation directly as CONFIRMED (SMS verified)
+        final negocioId = _negocioActual?.id ?? _negocioId ?? 'default';
+        final reserva = await _crearReserva.ejecutar(
+          mesaId,
+          fecha,
+          hora,
+          numeroPersonas,
+          contactoCliente: emailCliente,
+          nombreCliente: nombreCliente,
+          telefonoCliente: telefonoVerificado,
+          estadoInicial: EstadoReserva.confirmada,
+          negocioId: negocioId,
+        );
+
+        emit(ReservaCreada(
+          '✅ Reserva confirmada exitosamente. Recibirás los detalles en tu email.',
+        ));
+      } catch (e) {
+        emit(DisponibilidadConError('Error al crear la reserva: ${e.toString()}'));
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Validation and Error Handling
+
+<Accordion title="Zone Validation">
+  If you don't select a zone before searching:
+  ```dart
+  if (_zonaSeleccionada == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Por favor selecciona una zona'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    return;
+  }
+  ```
+</Accordion>
+
+<Accordion title="Date and Time Validation">
+  If you don't select both date and time:
+  ```dart
+  if (_fechaSeleccionada == null || _intervaloSeleccionado == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Por favor selecciona fecha y horario'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    return;
+  }
+  ```
+</Accordion>
+
+<Accordion title="No Available Tables">
+  When no tables are available:
+  ```dart
+  if (mesa == null) {
+    emit(DisponibilidadConError(
+      'No hay mesas disponibles en $zona para $numeroPersonas personas en ese horario.\n\n'
+      'Intenta con otra zona o un horario diferente.',
+    ));
+  }
+  ```
+  The error is displayed in an orange card (for scheduling issues) rather than red (for system errors).
+</Accordion>
+
+<Accordion title="Capacity Validation">
+  When selecting a table manually from the list:
+  ```dart
+  if (!mesa.puedeAcomodar(numeroPersonas)) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Esta mesa no es adecuada para $numeroPersonas personas'),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return;
+  }
+  ```
+</Accordion>
+
+## Tips for Customers
+
+- **Book in advance**: Reservations can be made up to 14 days ahead
+- **Choose off-peak times**: More tables are typically available during non-peak hours
+- **Be flexible with zones**: If your preferred zone is full, try another area
+- **Verify your phone number**: Make sure you can receive SMS messages at the number provided
+- **Check your email**: Reservation details and confirmations are sent via email

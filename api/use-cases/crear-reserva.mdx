@@ -1,0 +1,210 @@
+---
+title: 'CrearReserva'
+description: 'Use case for creating new restaurant reservations with comprehensive validation'
+---
+
+## Overview
+
+The `CrearReserva` use case handles the creation of new restaurant reservations with comprehensive business logic validation. It validates table availability, capacity constraints, business hours, advance booking limits, and optionally sends confirmation emails to both customers and restaurant owners.
+
+## Constructor
+
+```dart
+CrearReserva(
+  ReservaRepositorio reservaRepositorio, {
+  MesaRepositorio? mesaRepositorio,
+  HorarioAperturaRepositorio? horarioAperturaRepositorio,
+  NegocioRepositorio? negocioRepositorio,
+  ServicioEmail? servicioEmail,
+})
+```
+
+### Dependencies
+
+<ParamField path="reservaRepositorio" type="ReservaRepositorio" required>
+  Repository for managing reservation data persistence and queries
+</ParamField>
+
+<ParamField path="mesaRepositorio" type="MesaRepositorio" optional>
+  Repository for table data. Used to validate table existence and capacity constraints
+</ParamField>
+
+<ParamField path="horarioAperturaRepositorio" type="HorarioAperturaRepositorio" optional>
+  Repository for business hours. Used to validate if the restaurant is open at the requested time
+</ParamField>
+
+<ParamField path="negocioRepositorio" type="NegocioRepositorio" optional>
+  Repository for business configuration. Used to get max advance booking days, average duration, and business details
+</ParamField>
+
+<ParamField path="servicioEmail" type="ServicioEmail" optional>
+  Email service for sending confirmation notifications to customers and restaurant owners
+</ParamField>
+
+## ejecutar() Method
+
+Creates a new reservation with comprehensive validation.
+
+```dart
+Future<Reserva> ejecutar(
+  String mesaId,
+  DateTime fecha,
+  DateTime hora,
+  int numeroPersonas, {
+  String? contactoCliente,
+  String? nombreCliente,
+  String? telefonoCliente,
+  EstadoReserva estadoInicial = EstadoReserva.pendiente,
+  required String negocioId,
+})
+```
+
+### Parameters
+
+<ParamField path="mesaId" type="String" required>
+  Unique identifier of the table to reserve
+</ParamField>
+
+<ParamField path="fecha" type="DateTime" required>
+  Date for the reservation
+</ParamField>
+
+<ParamField path="hora" type="DateTime" required>
+  Time for the reservation (only hours and minutes are used)
+</ParamField>
+
+<ParamField path="numeroPersonas" type="int" required>
+  Number of people for the reservation. Must be greater than 0
+</ParamField>
+
+<ParamField path="contactoCliente" type="String" optional>
+  Customer's email address for notifications
+</ParamField>
+
+<ParamField path="nombreCliente" type="String" optional>
+  Customer's name
+</ParamField>
+
+<ParamField path="telefonoCliente" type="String" optional>
+  Customer's verified phone number
+</ParamField>
+
+<ParamField path="estadoInicial" type="EstadoReserva" default="EstadoReserva.pendiente">
+  Initial state of the reservation. Can be `pendiente` or `confirmada`
+</ParamField>
+
+<ParamField path="negocioId" type="String" required>
+  Unique identifier of the restaurant business
+</ParamField>
+
+### Return Value
+
+Returns a `Future<Reserva>` containing the created reservation with a generated ID and all configured properties.
+
+## Validation Logic
+
+The use case performs the following validations in order:
+
+### 1. Future Date Validation
+- Validates that the reservation date and time are in the future
+- **Exception**: `'La fecha y hora deben ser futuras.'`
+
+### 2. Maximum Advance Booking
+- Validates that the reservation is not beyond the configured maximum advance days (default: 14 days)
+- **Exception**: `'Solo se pueden hacer reservas hasta dentro de {maxDiasAnticipacion} días como máximo.'`
+
+### 3. Number of People Validation
+- Validates that `numeroPersonas` is greater than 0
+- **Exception**: `'El número de personas debe ser mayor a cero.'`
+
+### 4. Table Existence
+- If `mesaRepositorio` is provided, validates that the table exists
+- **Exception**: `'La mesa seleccionada no existe.'`
+
+### 5. Table Capacity
+- Validates that the table can accommodate the group using `mesa.puedeAcomodar()` business rules:
+  - Table must have enough capacity
+  - Table cannot be too large (max +3 capacity difference)
+- **Exceptions**:
+  - Too small: `'La mesa seleccionada tiene capacidad para {capacidad} persona(s), pero has indicado {numeroPersonas} personas. Por favor, selecciona una mesa con mayor capacidad.'`
+  - Too large: `'La mesa seleccionada tiene capacidad para {capacidad} personas, pero solo necesitas {numeroPersonas}. La diferencia es de {diferencia} lugares. Por favor, selecciona una mesa más adecuada (máximo +3 lugares de diferencia).'`
+
+### 6. Business Hours
+- If `horarioAperturaRepositorio` is provided, validates that the restaurant is open at the requested time
+- **Exception**: Custom message from `horarioAperturaRepositorio.obtenerMensajeHorarioCerrado()`
+
+### 7. Table Availability
+- Validates that the table is not already reserved during the time slot (considering duration)
+- **Exception**: `'La mesa seleccionada ya está reservada en ese horario. Por favor elige otra mesa u otro horario.'`
+
+## Email Notifications
+
+If `servicioEmail` is provided, the use case sends confirmation emails to:
+- The customer (if `contactoCliente` is provided)
+- The restaurant owner (if configured in business settings)
+
+Email failures do not cause the reservation creation to fail - they are logged as warnings.
+
+## Usage Example
+
+```dart
+// Initialize repositories
+final reservaRepo = FirebaseReservaRepositorio();
+final mesaRepo = FirebaseMesaRepositorio();
+final horarioRepo = FirebaseHorarioAperturaRepositorio();
+final negocioRepo = FirebaseNegocioRepositorio();
+final emailService = SendGridEmailService();
+
+// Create use case instance
+final crearReserva = CrearReserva(
+  reservaRepo,
+  mesaRepositorio: mesaRepo,
+  horarioAperturaRepositorio: horarioRepo,
+  negocioRepositorio: negocioRepo,
+  servicioEmail: emailService,
+);
+
+// Execute the use case
+try {
+  final reserva = await crearReserva.ejecutar(
+    'mesa-001',
+    DateTime(2026, 3, 15),
+    DateTime(2026, 3, 15, 19, 30), // 7:30 PM
+    4,
+    contactoCliente: 'cliente@example.com',
+    nombreCliente: 'Juan Pérez',
+    telefonoCliente: '+34612345678',
+    negocioId: 'negocio-001',
+  );
+  
+  print('Reserva creada: ${reserva.id}');
+  print('Estado: ${reserva.estado}');
+} on Exception catch (e) {
+  print('Error: ${e.toString()}');
+}
+```
+
+## Error Handling
+
+All validation errors are thrown as `Exception` objects with descriptive Spanish messages. Always wrap the `ejecutar()` call in a try-catch block:
+
+```dart
+try {
+  final reserva = await crearReserva.ejecutar(...);
+  // Handle success
+} on Exception catch (e) {
+  // Handle specific error messages
+  if (e.toString().contains('ya está reservada')) {
+    // Show alternative tables or time slots
+  } else if (e.toString().contains('capacidad')) {
+    // Show tables with appropriate capacity
+  } else {
+    // Show generic error
+  }
+}
+```
+
+## Related Types
+
+- [EstadoReserva](/api/entities/reserva#estado-reserva) - Enum for reservation states
+- [Reserva](/api/entities/reserva) - Reservation entity

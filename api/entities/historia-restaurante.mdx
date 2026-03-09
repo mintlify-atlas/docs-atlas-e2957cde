@@ -1,0 +1,346 @@
+---
+title: 'HistoriaRestaurante'
+description: 'Entity representing restaurant history and specialties'
+icon: 'book-open'
+---
+
+## Overview
+
+The `HistoriaRestaurante` system consists of classes that manage restaurant history information and specialty items for display purposes:
+- `EspecialidadItem` - Represents a single specialty dish or offering
+- `HistoriaRestaurante` - Contains the restaurant's story and specialties
+- `HistoriaData` - Static data holder with default content
+
+## EspecialidadItem
+
+Represents a specialty dish or offering of the restaurant.
+
+### Class Definition
+
+```dart
+class EspecialidadItem {
+  final String nombre;
+  final String descripcion;
+  final IconData icono;
+}
+```
+
+### Properties
+
+<ParamField path="nombre" type="String" required>
+  Name of the specialty dish
+</ParamField>
+
+<ParamField path="descripcion" type="String" required>
+  Description of the specialty
+</ParamField>
+
+<ParamField path="icono" type="IconData" required>
+  Flutter Material Design icon to display (requires `import 'package:flutter/material.dart'`)
+</ParamField>
+
+### Constructor
+
+```dart
+const EspecialidadItem({
+  required this.nombre,
+  required this.descripcion,
+  required this.icono,
+})
+```
+
+**Example:**
+```dart
+const paella = EspecialidadItem(
+  nombre: 'Paella Valenciana',
+  descripcion: 'Nuestra receta estrella con arroz bomba.',
+  icono: Icons.rice_bowl,
+);
+```
+
+## HistoriaRestaurante
+
+Contains the complete history and specialty information for a restaurant.
+
+### Class Definition
+
+```dart
+class HistoriaRestaurante {
+  final String titulo;
+  final String subtitulo;
+  final List<String> parrafosHistoria;
+  final List<EspecialidadItem> especialidades;
+}
+```
+
+### Properties
+
+<ParamField path="titulo" type="String" required>
+  Main title for the history section (e.g., "Nuestra Historia")
+</ParamField>
+
+<ParamField path="subtitulo" type="String" required>
+  Subtitle or tagline (e.g., "Tradición y pasión desde 1998")
+</ParamField>
+
+<ParamField path="parrafosHistoria" type="List<String>" required>
+  List of paragraphs telling the restaurant's story
+</ParamField>
+
+<ParamField path="especialidades" type="List<EspecialidadItem>" required>
+  List of specialty dishes or offerings
+</ParamField>
+
+### Constructor
+
+```dart
+HistoriaRestaurante({
+  required this.titulo,
+  required this.subtitulo,
+  required this.parrafosHistoria,
+  required this.especialidades,
+})
+```
+
+### Methods
+
+#### copyWith()
+
+Creates a copy of the history with specified fields updated.
+
+```dart
+HistoriaRestaurante copyWith({
+  String? titulo,
+  String? subtitulo,
+  List<String>? parrafosHistoria,
+  List<EspecialidadItem>? especialidades,
+})
+```
+
+**Returns:** `HistoriaRestaurante` - A new instance with updated fields
+
+## HistoriaData
+
+Static data holder containing the default restaurant history.
+
+### Class Definition
+
+```dart
+class HistoriaData {
+  static HistoriaRestaurante actual = HistoriaRestaurante(...);
+}
+```
+
+### Default Content
+
+The system comes with pre-configured default content:
+
+**Title:** "Nuestra Historia"
+
+**Subtitle:** "Tradición y pasión desde 1998"
+
+**History Paragraphs:**
+1. Restaurant founding story (1998 by Martínez family)
+2. Inspiration from traditional Mediterranean recipes
+3. 25+ years of commitment to excellence
+
+**Default Specialties:**
+- Paella Valenciana (rice_bowl icon)
+- Pulpo a la Gallega (set_meal icon)
+- Cochinillo Asado (dining icon)
+
+## Usage Examples
+
+### Creating Custom Restaurant History
+
+```dart
+final historia = HistoriaRestaurante(
+  titulo: 'Nuestra Historia',
+  subtitulo: 'Tradición familiar desde 1985',
+  parrafosHistoria: [
+    'Nuestro restaurante comenzó como un pequeño negocio familiar en el corazón de Barcelona.',
+    'Tres generaciones después, seguimos sirviendo los mismos platos tradicionales que nos hicieron famosos.',
+    'Cada receta está preparada con ingredientes frescos y locales, respetando las técnicas ancestrales.',
+  ],
+  especialidades: [
+    const EspecialidadItem(
+      nombre: 'Fideuá de Mariscos',
+      descripcion: 'Plato tradicional catalán con mariscos frescos del día.',
+      icono: Icons.set_meal,
+    ),
+    const EspecialidadItem(
+      nombre: 'Crema Catalana',
+      descripcion: 'Postre clásico con caramelo crujiente.',
+      icono: Icons.cake,
+    ),
+  ],
+);
+```
+
+### Using Default History Data
+
+```dart
+// Access the default pre-configured history
+final historiaDefecto = HistoriaData.actual;
+
+print(historiaDefecto.titulo);     // "Nuestra Historia"
+print(historiaDefecto.subtitulo);  // "Tradición y pasión desde 1998"
+print(historiaDefecto.parrafosHistoria.length); // 3
+print(historiaDefecto.especialidades.length);   // 3
+```
+
+### Modifying Default History
+
+```dart
+// Update the default history
+HistoriaData.actual = HistoriaData.actual.copyWith(
+  titulo: 'Nuestra Trayectoria',
+  especialidades: [
+    const EspecialidadItem(
+      nombre: 'Pulpo a la Brasa',
+      descripcion: 'Pulpo gallego cocinado a la perfección.',
+      icono: Icons.whatshot,
+    ),
+    const EspecialidadItem(
+      nombre: 'Chuletón de Buey',
+      descripcion: 'Carne madurada de primera calidad.',
+      icono: Icons.dining,
+    ),
+  ],
+);
+```
+
+### Displaying History in UI
+
+```dart
+import 'package:flutter/material.dart';
+
+class HistoriaWidget extends StatelessWidget {
+  final HistoriaRestaurante historia;
+  
+  const HistoriaWidget({required this.historia});
+  
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Title and Subtitle
+        Text(
+          historia.titulo,
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        Text(
+          historia.subtitulo,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        
+        // History Paragraphs
+        ...historia.parrafosHistoria.map(
+          (parrafo) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(parrafo),
+          ),
+        ),
+        
+        // Specialties
+        const SizedBox(height: 24),
+        Text(
+          'Nuestras Especialidades',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        ...historia.especialidades.map(
+          (especialidad) => ListTile(
+            leading: Icon(especialidad.icono),
+            title: Text(especialidad.nombre),
+            subtitle: Text(especialidad.descripcion),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// Usage
+HistoriaWidget(historia: HistoriaData.actual)
+```
+
+### Creating a Seafood Restaurant History
+
+```dart
+final historiaMarisqueria = HistoriaRestaurante(
+  titulo: 'Desde el Mar a tu Mesa',
+  subtitulo: 'Pescados y mariscos frescos desde 2005',
+  parrafosHistoria: [
+    'Ubicados frente al puerto, recibimos pescado fresco cada mañana directamente de los barcos pesqueros.',
+    'Nuestro compromiso es ofrecer solo los productos más frescos y de la más alta calidad.',
+    'El chef Antonio aprendió el oficio de su padre, quien fue pescador durante 40 años.',
+  ],
+  especialidades: [
+    const EspecialidadItem(
+      nombre: 'Lubina a la Sal',
+      descripcion: 'Lubina entera cocinada en costra de sal marina.',
+      icono: Icons.sailing,
+    ),
+    const EspecialidadItem(
+      nombre: 'Mariscada',
+      descripcion: 'Selección de mariscos frescos del día.',
+      icono: Icons.set_meal,
+    ),
+    const EspecialidadItem(
+      nombre: 'Arroz Negro',
+      descripcion: 'Arroz con tinta de calamar y alioli.',
+      icono: Icons.rice_bowl,
+    ),
+  ],
+);
+```
+
+### Iterating Through Specialties
+
+```dart
+final historia = HistoriaData.actual;
+
+print('Especialidades del restaurante:');
+for (var i = 0; i < historia.especialidades.length; i++) {
+  final especialidad = historia.especialidades[i];
+  print('${i + 1}. ${especialidad.nombre}');
+  print('   ${especialidad.descripcion}');
+}
+
+// Output:
+// Especialidades del restaurante:
+// 1. Paella Valenciana
+//    Nuestra receta estrella con arroz bomba.
+// 2. Pulpo a la Gallega
+//    Pulpo cocido al punto perfecto.
+// 3. Cochinillo Asado
+//    Asado lentamente en horno de leña.
+```
+
+## Common Material Icons for Dishes
+
+Useful `IconData` values from `Icons` class:
+
+| Icon | Use Case |
+|------|----------|
+| `Icons.rice_bowl` | Rice dishes, paella |
+| `Icons.set_meal` | Traditional meals, seafood |
+| `Icons.dining` | Meat dishes |
+| `Icons.local_pizza` | Pizza, Italian |
+| `Icons.cake` | Desserts |
+| `Icons.local_bar` | Beverages, cocktails |
+| `Icons.sailing` | Seafood, maritime theme |
+| `Icons.whatshot` | Grilled items, spicy food |
+| `Icons.soup_kitchen` | Soups, stews |
+| `Icons.egg` | Breakfast items |
+
+## Notes
+
+<Note>
+  The `EspecialidadItem` uses Flutter's `IconData` type, which requires the Flutter framework. This entity is designed for UI display purposes.
+</Note>
+
+<Warning>
+  The `HistoriaData.actual` is a static mutable field. Changes to it will affect all parts of the application that reference it. Consider using state management for production applications.
+</Warning>

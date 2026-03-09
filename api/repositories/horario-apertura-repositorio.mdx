@@ -1,0 +1,495 @@
+---
+title: HorarioAperturaRepositorio
+description: Repository interface and Firestore implementation for managing restaurant business hours
+---
+
+## Overview
+
+The `HorarioAperturaRepositorio` defines the contract for managing restaurant business hours, including checking if a restaurant is open at specific times, generating available time slots, and converting between different data formats. The Firestore implementation (`HorarioAperturaRepositorioFirestore`) provides flexible hour parsing and validation.
+
+## Interface
+
+```dart lib/dominio/repositorios/horario_apertura_repositorio.dart
+abstract class HorarioAperturaRepositorio {
+  Future<HorarioApertura?> obtenerHorarioPorNegocio(String negocioId);
+  Future<bool> estaAbiertoEn(String negocioId, DateTime fecha);
+  Future<String> obtenerMensajeHorarioCerrado(String negocioId, DateTime fecha);
+  Future<List<String>> obtenerIntervalosDisponibles(
+    String negocioId, 
+    DateTime fecha, 
+    {int intervaloMinutos = 60}
+  );
+  Future<bool> guardarHorario(HorarioApertura horario);
+  
+  Map<String, String> horarioAMapString(HorarioApertura horario);
+  HorarioApertura mapStringAHorario(String negocioId, Map<String, String> mapa);
+}
+```
+
+## Methods
+
+### obtenerHorarioPorNegocio
+
+Retrieves the complete business hours configuration for a restaurant.
+
+<ParamField path="negocioId" type="String" required>
+  The unique identifier of the restaurant.
+</ParamField>
+
+<ResponseField name="Future<HorarioApertura?>" type="HorarioApertura?">
+  Returns the business hours entity if found, or `null` if no schedule is configured.
+</ResponseField>
+
+```dart Example Usage
+final horario = await repositorio.obtenerHorarioPorNegocio('negocio_abc');
+if (horario != null) {
+  print('Horario configurado para ${horario.horariosSemanal.length} días');
+}
+```
+
+---
+
+### estaAbiertoEn
+
+Checks if a restaurant is open at a specific date and time.
+
+<ParamField path="negocioId" type="String" required>
+  The unique identifier of the restaurant.
+</ParamField>
+
+<ParamField path="fecha" type="DateTime" required>
+  The date and time to check (includes both date and time components).
+</ParamField>
+
+<ResponseField name="Future<bool>" type="bool">
+  Returns `true` if the restaurant is open at that time, or `false` if closed. Returns `true` if no schedule is configured (default open).
+</ResponseField>
+
+**Behavior:**
+- If no schedule exists, assumes the restaurant is always open
+- Uses `HorarioApertura.estaAbiertoEn()` method for validation
+- Considers the day of the week and time of day
+
+```dart Example Usage
+final fecha = DateTime(2026, 3, 15, 20, 30); // Saturday at 8:30 PM
+
+final abierto = await repositorio.estaAbiertoEn('negocio_abc', fecha);
+if (abierto) {
+  print('El restaurante está abierto');
+} else {
+  print('El restaurante está cerrado');
+}
+```
+
+---
+
+### obtenerMensajeHorarioCerrado
+
+Generates a user-friendly error message when a restaurant is closed.
+
+<ParamField path="negocioId" type="String" required>
+  The unique identifier of the restaurant.
+</ParamField>
+
+<ParamField path="fecha" type="DateTime" required>
+  The date and time that was requested.
+</ParamField>
+
+<ResponseField name="Future<String>" type="String">
+  Returns an error message if the restaurant is closed, or an empty string if it's open. Returns a default message if no schedule is configured.
+</ResponseField>
+
+**Message Examples:**
+- "El restaurante está cerrado los lunes"
+- "El restaurante cierra a las 15:00. Próximo horario: 20:00 - 23:00"
+- "No hay información de horarios disponible."
+
+```dart Example Usage
+final mensaje = await repositorio.obtenerMensajeHorarioCerrado(
+  'negocio_abc',
+  DateTime(2026, 3, 17, 16, 0), // Monday at 4 PM
+);
+
+if (mensaje.isNotEmpty) {
+  print('Error: $mensaje');
+  // Show message to user
+}
+```
+
+---
+
+### obtenerIntervalosDisponibles
+
+Generates a list of available time slots for a specific date based on business hours.
+
+<ParamField path="negocioId" type="String" required>
+  The unique identifier of the restaurant.
+</ParamField>
+
+<ParamField path="fecha" type="DateTime" required>
+  The date to generate time slots for.
+</ParamField>
+
+<ParamField path="intervaloMinutos" type="int" default="60">
+  The duration of each time slot in minutes.
+</ParamField>
+
+<ResponseField name="Future<List<String>>" type="List<String>">
+  Returns a list of formatted time slots (e.g., ["12:00 - 13:00", "13:00 - 14:00"]). Returns an empty list if closed or no schedule configured.
+</ResponseField>
+
+**Algorithm:**
+1. Fetches the business hours for the restaurant
+2. Identifies the day of the week from the date
+3. Returns empty list if the restaurant is closed that day
+4. For each open time interval:
+   - Generates slots starting from the opening time
+   - Each slot has the specified duration
+   - Continues until the closing time is reached
+5. Handles midnight-crossing intervals (e.g., 23:00 - 02:00)
+
+```dart Example Usage
+// Get hourly slots for Saturday
+final intervalos = await repositorio.obtenerIntervalosDisponibles(
+  'negocio_abc',
+  DateTime(2026, 3, 15), // Saturday
+  intervaloMinutos: 60,
+);
+
+print('Horarios disponibles:');
+for (final intervalo in intervalos) {
+  print('- $intervalo');
+}
+// Output:
+// - 12:00 - 13:00
+// - 13:00 - 14:00
+// - 14:00 - 15:00
+// - 20:00 - 21:00
+// - 21:00 - 22:00
+// - 22:00 - 23:00
+
+// Get 30-minute slots
+final intervalos30 = await repositorio.obtenerIntervalosDisponibles(
+  'negocio_abc',
+  DateTime(2026, 3, 15),
+  intervaloMinutos: 30,
+);
+// Output: 12:00 - 12:30, 12:30 - 13:00, 13:00 - 13:30, etc.
+```
+
+---
+
+### guardarHorario
+
+Saves or updates the business hours for a restaurant.
+
+<ParamField path="horario" type="HorarioApertura" required>
+  The complete business hours configuration to save.
+</ParamField>
+
+<ResponseField name="Future<bool>" type="bool">
+  Returns `true` if the save was successful, `false` otherwise.
+</ResponseField>
+
+**Behavior:**
+- Creates a new document if no schedule exists for the business
+- Updates the existing document if a schedule already exists
+- Uses the `negocioId` from the `HorarioApertura` object to identify the restaurant
+
+```dart Example Usage
+final horario = HorarioApertura(
+  negocioId: 'negocio_abc',
+  horariosSemanal: [
+    HorarioDia(
+      nombreDia: 'lunes',
+      cerrado: true,
+    ),
+    HorarioDia(
+      nombreDia: 'martes',
+      cerrado: false,
+      intervalos: [
+        IntervaloHorario(
+          horaInicio: 12,
+          minutoInicio: 0,
+          horaFin: 15,
+          minutoFin: 30,
+        ),
+        IntervaloHorario(
+          horaInicio: 20,
+          minutoInicio: 0,
+          horaFin: 23,
+          minutoFin: 30,
+        ),
+      ],
+    ),
+    // ... more days
+  ],
+);
+
+final exitoso = await repositorio.guardarHorario(horario);
+if (exitoso) {
+  print('Horario guardado correctamente');
+}
+```
+
+---
+
+### horarioAMapString
+
+Converts a `HorarioApertura` entity to a user-friendly string map for UI display.
+
+<ParamField path="horario" type="HorarioApertura" required>
+  The business hours configuration to convert.
+</ParamField>
+
+<ResponseField name="Map<String, String>" type="Map<String, String>">
+  Returns a map where keys are day names and values are formatted hour strings.
+</ResponseField>
+
+**Format Examples:**
+- `{"lunes": "Cerrado"}`
+- `{"martes": "12:00 - 15:30"}`
+- `{"miércoles": "12:00 - 15:30 / 20:00 - 23:30"}`
+- `{"jueves": "Sin horario"}`
+
+```dart Example Usage
+final horario = await repositorio.obtenerHorarioPorNegocio('negocio_abc');
+if (horario != null) {
+  final mapaString = repositorio.horarioAMapString(horario);
+  
+  mapaString.forEach((dia, horas) {
+    print('$dia: $horas');
+  });
+}
+// Output:
+// lunes: Cerrado
+// martes: 12:00 - 15:30 / 20:00 - 23:30
+// miércoles: 12:00 - 15:30 / 20:00 - 23:30
+```
+
+---
+
+### mapStringAHorario
+
+Converts a user-edited string map back to a `HorarioApertura` entity.
+
+<ParamField path="negocioId" type="String" required>
+  The unique identifier of the restaurant.
+</ParamField>
+
+<ParamField path="mapa" type="Map<String, String>" required>
+  A map where keys are day names and values are hour strings.
+</ParamField>
+
+<ResponseField name="HorarioApertura" type="HorarioApertura">
+  Returns a complete `HorarioApertura` entity parsed from the strings.
+</ResponseField>
+
+**Supported Input Formats:**
+
+| Input String | Parsed Result |
+|--------------|---------------|
+| `"Cerrado"` | Day marked as closed |
+| `"9-13"` | Single interval: 9:00 - 13:00 |
+| `"09:00 - 13:00"` | Single interval: 9:00 - 13:00 |
+| `"9 - 13:30"` | Single interval: 9:00 - 13:30 |
+| `"12:00 - 15:30 / 20:00 - 23:30"` | Two intervals (split shifts) |
+| `"9-13 y 18-22"` | Two intervals using "y" separator |
+| `"12 a 15"` | Single interval: 12:00 - 15:00 |
+| `"12 hasta 15:30"` | Single interval: 12:00 - 15:30 |
+
+**Flexible Parsing:**
+- Supports `/` or `y` as interval separators
+- Supports `-`, `a`, or `hasta` as range separators
+- Handles hours with or without minutes ("9" becomes "9:00")
+- Ignores whitespace and normalizes formatting
+
+```dart Example Usage
+final mapaEditado = {
+  'lunes': 'Cerrado',
+  'martes': '12:00 - 15:30 / 20:00 - 23:30',
+  'miércoles': '12 - 15:30 / 20 - 23:30',
+  'jueves': '12-15:30/20-23:30',
+  'viernes': '12 a 16 y 20 hasta 00:00',
+  'sábado': '12-00',
+  'domingo': 'Cerrado',
+};
+
+final horario = repositorio.mapStringAHorario('negocio_abc', mapaEditado);
+
+// Now save to Firestore
+await repositorio.guardarHorario(horario);
+```
+
+---
+
+## Firestore Implementation
+
+### Collection Structure
+
+Business hours are stored in the `horarios_apertura` collection:
+
+```json Firestore Document
+{
+  "negocioId": "negocio_abc",
+  "horariosSemanal": [
+    {
+      "nombreDia": "lunes",
+      "cerrado": true,
+      "intervalos": []
+    },
+    {
+      "nombreDia": "martes",
+      "cerrado": false,
+      "intervalos": [
+        {
+          "horaInicio": 12,
+          "minutoInicio": 0,
+          "horaFin": 15,
+          "minutoFin": 30
+        },
+        {
+          "horaInicio": 20,
+          "minutoInicio": 0,
+          "horaFin": 23,
+          "minutoFin": 30
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Day Name Mapping
+
+The implementation maps Spanish day names to weekday numbers (ISO 8601):
+
+| Spanish Name | Weekday Number |
+|--------------|----------------|
+| `"lunes"` | 1 (Monday) |
+| `"martes"` | 2 (Tuesday) |
+| `"miércoles"` / `"miercoles"` | 3 (Wednesday) |
+| `"jueves"` | 4 (Thursday) |
+| `"viernes"` | 5 (Friday) |
+| `"sábado"` / `"sabado"` | 6 (Saturday) |
+| `"domingo"` | 7 (Sunday) |
+
+Both accented and unaccented versions are supported for compatibility.
+
+### Midnight-Crossing Intervals
+
+The implementation handles intervals that cross midnight (e.g., 23:00 - 02:00):
+
+```dart
+// If horaFin < horaInicio, assume it crosses midnight
+var horaFinCalculo = intervalo.horaFin;
+if (horaFinCalculo < intervalo.horaInicio) {
+  horaFinCalculo += 24; // Convert to 24+ hour format
+}
+```
+
+This allows restaurants to properly configure late-night hours.
+
+---
+
+## Related Types
+
+### HorarioApertura Entity
+
+```dart
+class HorarioApertura {
+  final String negocioId;
+  final List<HorarioDia> horariosSemanal;
+  
+  bool estaAbiertoEn(DateTime fechaHora);
+  String obtenerMensajeError(DateTime fechaHora);
+}
+```
+
+### HorarioDia Entity
+
+```dart
+class HorarioDia {
+  final String nombreDia; // "lunes", "martes", etc.
+  final bool cerrado;
+  final List<IntervaloHorario> intervalos;
+}
+```
+
+### IntervaloHorario Entity
+
+```dart
+class IntervaloHorario {
+  final int horaInicio; // 0-23
+  final int minutoInicio; // 0-59
+  final int horaFin; // 0-23 (can be < horaInicio for midnight crossing)
+  final int minutoFin; // 0-59
+}
+```
+
+## Use Cases
+
+### Validating Reservation Times
+
+```dart
+final fechaReserva = DateTime(2026, 3, 15, 16, 0); // Saturday at 4 PM
+
+final abierto = await horarioRepo.estaAbiertoEn('negocio_abc', fechaReserva);
+
+if (!abierto) {
+  final mensaje = await horarioRepo.obtenerMensajeHorarioCerrado(
+    'negocio_abc',
+    fechaReserva,
+  );
+  
+  // Show error to user: "El restaurante cierra a las 15:30. Próximo horario: 20:00 - 23:30"
+  throw Exception(mensaje);
+}
+
+// Proceed with reservation
+```
+
+### Building a Time Slot Picker
+
+```dart
+final fecha = DateTime(2026, 3, 15); // User selected Saturday
+
+final intervalos = await horarioRepo.obtenerIntervalosDisponibles(
+  'negocio_abc',
+  fecha,
+  intervaloMinutos: 30, // 30-minute slots
+);
+
+// Display slots in UI dropdown
+for (final intervalo in intervalos) {
+  // Add to UI: "12:00 - 12:30", "12:30 - 13:00", etc.
+}
+```
+
+### Admin Schedule Editor
+
+```dart
+// Load current schedule
+final horarioActual = await horarioRepo.obtenerHorarioPorNegocio('negocio_abc');
+final mapaString = horarioActual != null 
+    ? horarioRepo.horarioAMapString(horarioActual)
+    : {};
+
+// Show editable form to admin
+// ... user edits hours in text fields ...
+
+// Save updated schedule
+final mapaEditado = {
+  'lunes': 'Cerrado',
+  'martes': '12-15:30/20-23:30',
+  // ... more days
+};
+
+final horarioNuevo = horarioRepo.mapStringAHorario('negocio_abc', mapaEditado);
+await horarioRepo.guardarHorario(horarioNuevo);
+```
+
+## See Also
+
+- [NegocioRepositorio](/api/repositories/negocio-repositorio) - Restaurant business management
+- [ReservaRepositorio](/api/repositories/reserva-repositorio) - Should validate against business hours

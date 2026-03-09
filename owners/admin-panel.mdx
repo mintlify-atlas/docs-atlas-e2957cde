@@ -1,0 +1,206 @@
+---
+title: 'Admin Panel Overview'
+description: 'Access and navigate the business owner admin panel to manage your restaurant operations'
+icon: 'gauge-high'
+---
+
+## Accessing the Admin Panel
+
+The admin panel is a restricted area exclusively for restaurant business owners. Access requires authentication with your business credentials.
+
+### Authentication Requirements
+
+To access the admin panel, you must:
+
+<Steps>
+  <Step title="Navigate from home screen">
+    Start from the application home screen and select the business owner login option
+  </Step>
+  <Step title="Authenticate your credentials">
+    Sign in using either email/password or Google Sign-In (see [Authentication](/owners/authentication))
+  </Step>
+  <Step title="Access granted">
+    Upon successful authentication, you'll be directed to your business's admin panel
+  </Step>
+</Steps>
+
+<Warning>
+If you attempt to access the admin panel without proper authentication, you'll see a restricted access screen prompting you to return to the home page and authenticate.
+</Warning>
+
+## Admin Panel Layout
+
+The admin panel provides a comprehensive dashboard for managing all aspects of your restaurant's reservation system.
+
+### Header Section
+
+The panel header displays:
+
+- **Business name** in the title bar
+- **Back button** to sign out
+- **Logout icon** for quick session termination
+
+<Info>
+Both the back button and logout icon trigger a confirmation dialog before signing you out, preventing accidental logouts.
+</Info>
+
+### Welcome Card
+
+The welcome card shows:
+
+- Your restaurant's **icon/logo** in a circular badge
+- **Welcome message** with your business name
+- **Owner name** from the business profile
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_screen.dart:138-204`
+
+### Quick Actions
+
+The admin panel features a horizontal scrollable list of quick action cards:
+
+<Columns cols={2}>
+  <Card title="Reservas" icon="calendar-check">
+    Manage all reservations - view, confirm, and cancel bookings
+  </Card>
+  <Card title="Mesas" icon="table-columns">
+    Configure tables - add, edit, and delete table arrangements
+  </Card>
+  <Card title="Horarios" icon="clock">
+    Define business hours and availability schedules
+  </Card>
+  <Card title="Zonas" icon="map-location-dot">
+    Manage restaurant zones and sections
+  </Card>
+  <Card title="Métricas" icon="chart-line">
+    View analytics and reservation insights
+  </Card>
+  <Card title="Reglas" icon="gear">
+    Configure business rules and timing policies
+  </Card>
+  <Card title="Historia" icon="book">
+    Edit your restaurant's story and description
+  </Card>
+</Columns>
+
+Each action card uses gradient colors and icons to provide visual organization:
+- **Reservas**: Blue gradient
+- **Mesas**: Green gradient  
+- **Horarios**: Orange gradient
+- **Zonas**: Purple gradient
+- **Métricas**: Purple-indigo gradient
+- **Reglas**: Gray-dark gradient
+- **Historia**: Purple-dark gradient
+
+## Business Information Section
+
+The lower section displays editable business details:
+
+### Editable Fields
+
+All fields feature an edit icon that opens a dialog for modifications:
+
+| Field | Icon | Description |
+|-------|------|-------------|
+| Restaurant Name | 🏪 | Your business display name |
+| Icon/Logo | 🎨 | Visual identifier (9 icon options available) |
+| Email | 📧 | Contact email for notifications |
+| Phone | 📱 | Contact phone with verification badge |
+| Address | 📍 | Physical location |
+| Specialty | 🍽️ | Cuisine type or specialty |
+| Description | 📄 | Restaurant description (max 300 characters) |
+
+<Tip>
+When editing information, changes are saved to Firestore and immediately reflected in the admin panel state.
+</Tip>
+
+### Available Restaurant Icons
+
+You can choose from these icon options:
+
+- **Restaurant** - Generic restaurant icon
+- **Sailing** - Beach or coastal restaurant
+- **Local Fire Department** - Grill or BBQ
+- **Local Pizza** - Pizzeria
+- **Ramen Dining** - Asian cuisine
+- **Coffee** - Café or coffee shop
+- **Icecream** - Ice cream parlor
+- **Bakery Dining** - Bakery or pastry shop
+- **Local Bar** - Bar or pub
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_screen.dart:807-818`
+
+## Security Section
+
+The security section provides account management options:
+
+### Change Password
+
+Update your access credentials for enhanced security. This option is only available for email/password authentication accounts.
+
+<Warning>
+Users who signed in with Google cannot change their password through the system, as authentication is managed by Google.
+</Warning>
+
+### Phone Verification
+
+Verify your phone number for:
+- Enhanced account security
+- Additional contact options
+- Verification badge display
+
+When verified, a **green verification badge** appears next to your phone number.
+
+## Logging Out
+
+To sign out of the admin panel:
+
+<Steps>
+  <Step title="Click logout">
+    Tap the back arrow or logout icon in the app bar
+  </Step>
+  <Step title="Confirm action">
+    A confirmation dialog appears asking "¿Estás seguro de que deseas cerrar sesión?"
+  </Step>
+  <Step title="Complete logout">
+    Select **Cerrar Sesión** to confirm, or **Cancelar** to stay logged in
+  </Step>
+  <Step title="Redirect to home">
+    Upon confirmation, you'll be redirected to the application home screen
+  </Step>
+</Steps>
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_screen.dart:483-521`
+
+## State Management
+
+The admin panel uses the `PantallaDuenoCubit` for state management, which handles:
+
+- Authentication state
+- Business data updates
+- Error handling and user feedback
+- Session management
+
+The cubit emits different states:
+- `PantallaDuenoInicial` - Not authenticated
+- `PantallaDuenoCargando` - Loading authentication
+- `PantallaDuenoAutenticado` - Successfully authenticated with business data
+- `PantallaDuenoConError` - Error state with message
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Table Management" icon="table-columns" href="/owners/table-management">
+    Configure your restaurant's table layout and zones
+  </Card>
+  <Card title="Reservation Management" icon="calendar-check" href="/owners/reservation-management">
+    View and manage customer reservations
+  </Card>
+  <Card title="Business Configuration" icon="gear" href="/owners/business-configuration">
+    Set up business hours and reservation policies
+  </Card>
+  <Card title="Notifications" icon="bell" href="/owners/notifications">
+    Understand the email notification system
+  </Card>
+</CardGroup>

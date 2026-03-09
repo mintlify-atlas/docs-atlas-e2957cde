@@ -1,122 +1,132 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Restaurant Reservation System",
+  "theme": "almond",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#3dcffc",
+    "light": "#0b5b9c",
+    "dark": "#ffffff"
   },
   "favicon": "/favicon.svg",
+  "logo": {
+    "light": "https://media.brand.dev/7a42e40b-9683-4833-8d02-a15990c6b1a0.svg",
+    "dark": "https://media.brand.dev/7a42e40b-9683-4833-8d02-a15990c6b1a0.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/AgustinLuconi/Software_Restaurante"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/AgustinLuconi/Software_Restaurante"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "installation"
             ]
           },
           {
-            "group": "Customization",
+            "group": "For Customers",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "customers/making-reservations",
+              "customers/checking-availability",
+              "customers/managing-reservations",
+              "customers/sms-verification"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "For Business Owners",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "owners/admin-panel",
+              "owners/authentication",
+              "owners/table-management",
+              "owners/reservation-management",
+              "owners/business-configuration",
+              "owners/notifications"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Architecture",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "architecture/overview",
+              "architecture/clean-architecture",
+              "architecture/domain-layer",
+              "architecture/application-layer",
+              "architecture/adapters-layer",
+              "architecture/presentation-layer"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/firebase-setup",
+              "guides/email-configuration",
+              "guides/state-management",
+              "guides/testing"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Domain Entities",
             "pages": [
-              "api-reference/introduction"
+              "api/entities/reserva",
+              "api/entities/mesa",
+              "api/entities/negocio",
+              "api/entities/horario-apertura",
+              "api/entities/historia-restaurante"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Use Cases",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/use-cases/crear-reserva",
+              "api/use-cases/cancelar-reserva",
+              "api/use-cases/obtener-reserva"
+            ]
+          },
+          {
+            "group": "Repositories",
+            "pages": [
+              "api/repositories/reserva-repositorio",
+              "api/repositories/mesa-repositorio",
+              "api/repositories/negocio-repositorio",
+              "api/repositories/horario-apertura-repositorio",
+              "api/repositories/historia-repositorio"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "api/services/autenticacion",
+              "api/services/email",
+              "api/services/verificacion-cliente"
+            ]
+          },
+          {
+            "group": "State Management",
+            "pages": [
+              "api/state/disponibilidad-cubit",
+              "api/state/mis-reservas-cubit",
+              "api/state/pantalla-dueno-cubit"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

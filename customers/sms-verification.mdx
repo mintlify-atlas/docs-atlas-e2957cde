@@ -1,0 +1,590 @@
+---
+title: 'SMS Verification'
+description: 'Understanding the SMS verification process with Firebase Authentication'
+icon: 'message-sms'
+---
+
+## Overview
+
+The Restaurant Reservation System uses Firebase Authentication to verify customer phone numbers via SMS. This ensures that reservations are legitimate and allows customers to view their booking history securely.
+
+<Note>
+  SMS verification is required for:
+  - Creating new reservations
+  - Viewing existing reservations ("Mis Reservas")
+</Note>
+
+## How It Works
+
+<Steps>
+  <Step title="Phone Number Normalization">
+    When you enter your phone number, it's automatically normalized to E.164 format:
+
+    ```dart
+    // From servicio_verificacion_cliente.dart
+    String normalizarTelefono(String telefono) {
+      String normalizado = telefono.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+
+      if (!normalizado.startsWith('+')) {
+        // Remove leading 0 if exists
+        if (normalizado.startsWith('0')) {
+          normalizado = normalizado.substring(1);
+        }
+        // If starts with 15 (local format), remove it
+        if (normalizado.startsWith('15')) {
+          normalizado = '9${normalizado.substring(2)}';
+        }
+        // If doesn't have 9 after area code
+        if (!normalizado.startsWith('9') && normalizado.length == 10) {
+          normalizado = '9$normalizado';
+        }
+        // Add Argentina country code
+        normalizado = '+54$normalizado';
+      }
+
+      return normalizado;
+    }
+    ```
+
+    <Info>
+      **Example transformations:**
+      - `2614567890` → `+542614567890`
+      - `0261 456-7890` → `+542614567890`
+      - `15 2614567890` → `+5492614567890`
+    </Info>
+  </Step>
+
+  <Step title="Phone Number Validation">
+    The system validates your phone number before sending SMS:
+
+    ```dart
+    Map<String, dynamic> validarTelefono(String telefono) {
+      try {
+        final formateado = normalizarTelefono(telefono);
+
+        if (formateado.length < 13 || formateado.length > 14) {
+          return {'valido': false, 'error': 'Número de teléfono inválido'};
+        }
+
+        if (!formateado.startsWith('+54')) {
+          return {'valido': false, 'error': 'Debe ser un número argentino (+54)'};
+        }
+
+        return {'valido': true, 'formateado': formateado};
+      } catch (e) {
+        return {'valido': false, 'error': 'Formato de teléfono inválido'};
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Send SMS Code">
+    Once validated, Firebase sends a 6-digit verification code to your phone.
+
+    ### Web Implementation
+
+    ```dart
+    Future<bool> enviarCodigoSMS({
+      required String telefono,
+      required Function(String) onCodigoEnviado,
+      required Function(String) onError,
+      required Function(String) onVerificacionAutomatica,
+    }) async {
+      try {
+        final telefonoFormateado = normalizarTelefono(telefono);
+
+        // On web, use signInWithPhoneNumber with RecaptchaVerifier
+        if (kIsWeb) {
+          // Clean any previous recaptcha
+          _limpiarRecaptcha();
+          
+          // Create invisible RecaptchaVerifier (no container = automatic modal)
+          _recaptchaVerifier = RecaptchaVerifier(
+            auth: FirebaseAuthPlatform.instance,
+            // No container = invisible reCAPTCHA
+          );
+          
+          // Sign in with phone number
+          _confirmationResult = await _auth.signInWithPhoneNumber(
+            telefonoFormateado,
+            _recaptchaVerifier,
+          );
+          
+          // Save verificationId for later verification
+          _verificationId = _confirmationResult!.verificationId;
+          onCodigoEnviado('Código enviado por SMS');
+          return true;
+        }
+
+        // Mobile implementation continues...
+      } catch (e) {
+        // Error handling...
+      }
+    }
+    ```
+
+    ### Mobile Implementation
+
+    ```dart
+    // On mobile, use verifyPhoneNumber
+    await _auth.verifyPhoneNumber(
+      phoneNumber: telefonoFormateado,
+      timeout: const Duration(seconds: 60),
+
+      // Automatic verification (Android)
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        try {
+          final result = await _auth.signInWithCredential(credential);
+          if (result.user != null) {
+            onVerificacionAutomatica(
+              result.user!.phoneNumber ?? telefonoFormateado,
+            );
+          }
+        } catch (e) {
+          onError('Error en verificación automática: $e');
+        }
+      },
+
+      // Verification failed
+      verificationFailed: (FirebaseAuthException e) {
+        String mensaje;
+        switch (e.code) {
+          case 'invalid-phone-number':
+            mensaje = 'Número de teléfono inválido. Usa formato: +54 9 11 1234-5678';
+            break;
+          case 'too-many-requests':
+            mensaje = 'Demasiados intentos. Intenta más tarde';
+            break;
+          case 'quota-exceeded':
+            mensaje = 'Límite de SMS excedido. Contacta al administrador';
+            break;
+          default:
+            mensaje = 'Error: ${e.message}';
+        }
+        onError(mensaje);
+      },
+
+      // Code sent successfully
+      codeSent: (String verificationId, int? resendToken) {
+        _verificationId = verificationId;
+        _resendToken = resendToken;
+        onCodigoEnviado('Código enviado por SMS');
+      },
+
+      // Timeout
+      codeAutoRetrievalTimeout: (String verificationId) {
+        _verificationId = verificationId;
+      },
+
+      // Resend token
+      forceResendingToken: _resendToken,
+    );
+    ```
+
+    <Note>
+      **On Android**: The app may automatically verify without requiring you to enter the code (if Google Play Services detects the SMS).
+    </Note>
+  </Step>
+
+  <Step title="Enter Verification Code">
+    You'll see a dialog prompting you to enter the 6-digit code:
+
+    ```dart
+    void _mostrarVerificacionSMS(BuildContext context, String telefono) {
+      final codigoController = TextEditingController();
+      bool enviando = true;
+      bool verificando = false;
+      String? errorCodigo;
+      int segundosRestantes = 60;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Send code when dialog opens
+            if (enviando) {
+              servicioVerificacion.enviarCodigoSMS(
+                telefono: telefono,
+                onCodigoEnviado: (verificationId) {
+                  setDialogState(() => enviando = false);
+                  _iniciarTimerReenvio(setDialogState, ...);
+                },
+                onError: (error) {
+                  Navigator.of(dialogContext).pop();
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error al enviar SMS: $error'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                },
+                onVerificacionAutomatica: (credential) async {
+                  Navigator.of(dialogContext).pop();
+                  _onVerificacionExitosa(telefono);
+                },
+              );
+            }
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.sms, color: Color(0xFF27AE60)),
+                  Text('Verificación SMS'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (enviando) ..[
+                    CircularProgressIndicator(),
+                    Text('Enviando código SMS...'),
+                  ] else ..[
+                    Text('Ingresá el código de 6 dígitos enviado a:'),
+                    Text(telefono, style: TextStyle(fontWeight: FontWeight.bold)),
+                    TextField(
+                      controller: codigoController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 24,
+                        letterSpacing: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: '000000',
+                        errorText: errorCodigo,
+                      ),
+                    ),
+                    if (segundosRestantes > 0)
+                      Text('Puedes reenviar en $segundosRestantes segundos')
+                    else
+                      TextButton(
+                        onPressed: () {
+                          setDialogState(() {
+                            enviando = true;
+                            segundosRestantes = 60;
+                          });
+                        },
+                        child: Text('Reenviar código'),
+                      ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text('Cancelar'),
+                ),
+                if (!enviando)
+                  ElevatedButton(
+                    onPressed: verificando ? null : () async {
+                      final codigo = codigoController.text.trim();
+                      if (codigo.length != 6) {
+                        setDialogState(() {
+                          errorCodigo = 'Ingresá el código de 6 dígitos';
+                        });
+                        return;
+                      }
+
+                      setDialogState(() {
+                        verificando = true;
+                        errorCodigo = null;
+                      });
+
+                      try {
+                        final telefonoVerificado = await servicioVerificacion
+                            .verificarCodigoSMS(codigo: codigo);
+
+                        Navigator.of(dialogContext).pop();
+                        _onVerificacionExitosa(telefonoVerificado);
+                      } catch (e) {
+                        setDialogState(() {
+                          verificando = false;
+                          errorCodigo = 'Código incorrecto. Intentá de nuevo.';
+                        });
+                      }
+                    },
+                    child: verificando
+                        ? CircularProgressIndicator(color: Colors.white)
+                        : Text('Verificar'),
+                  ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+    ```
+
+    <Info>
+      You have 60 seconds to enter the code. After that, you can request a new code via the "Reenviar código" button.
+    </Info>
+  </Step>
+
+  <Step title="Verify Code">
+    When you submit the code, it's verified with Firebase:
+
+    ```dart
+    Future<String> verificarCodigoSMS({required String codigo}) async {
+      if (_verificationId == null && _confirmationResult == null) {
+        throw Exception('Primero debes solicitar el código SMS');
+      }
+
+      try {
+        UserCredential result;
+        
+        // On web, use confirmationResult if available
+        if (kIsWeb && _confirmationResult != null) {
+          result = await _confirmationResult!.confirm(codigo);
+        } else {
+          // On mobile or fallback, use traditional credential
+          final credential = PhoneAuthProvider.credential(
+            verificationId: _verificationId!,
+            smsCode: codigo,
+          );
+          result = await _auth.signInWithCredential(credential);
+        }
+
+        if (result.user == null) {
+          throw Exception('Error al verificar código');
+        }
+
+        final telefonoVerificado = result.user!.phoneNumber ?? '';
+
+        // Clean internal state and recaptcha
+        _limpiarEstado();
+
+        return telefonoVerificado;
+      } on FirebaseAuthException catch (e) {
+        _limpiarEstado();
+        
+        switch (e.code) {
+          case 'invalid-verification-code':
+            throw Exception('Código incorrecto. Verifica e intenta nuevamente');
+          case 'session-expired':
+            throw Exception('El código ha expirado. Solicita uno nuevo');
+          default:
+            throw Exception('Error: ${e.message}');
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Successful Verification">
+    Once verified, the system:
+    - Stores your verified phone number
+    - Creates the reservation (when making a booking)
+    - Or loads your reservations (when viewing "Mis Reservas")
+
+    ```dart
+    // From disponibilidad_cubit.dart
+    Future<void> crearReservaVerificadaPorSMS({
+      required String emailCliente,
+      required String telefonoVerificado,
+      required String? nombreCliente,
+      required String mesaId,
+      required DateTime fecha,
+      required DateTime hora,
+      required int numeroPersonas,
+    }) async {
+      try {
+        emit(ProcesandoReserva());
+
+        // Create reservation directly as CONFIRMED (SMS verified)
+        final negocioId = _negocioActual?.id ?? _negocioId ?? 'default';
+        final reserva = await _crearReserva.ejecutar(
+          mesaId,
+          fecha,
+          hora,
+          numeroPersonas,
+          contactoCliente: emailCliente,
+          nombreCliente: nombreCliente,
+          telefonoCliente: telefonoVerificado,
+          estadoInicial: EstadoReserva.confirmada,  // Already verified!
+          negocioId: negocioId,
+        );
+
+        emit(ReservaCreada(
+          '✅ Reserva confirmada exitosamente. Recibirás los detalles en tu email.',
+        ));
+      } catch (e) {
+        emit(DisponibilidadConError('Error al crear la reserva: ${e.toString()}'));
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## reCAPTCHA (Web Only)
+
+On web platforms, Firebase uses reCAPTCHA to prevent abuse:
+
+```dart
+void _limpiarRecaptcha() {
+  if (_recaptchaVerifier != null) {
+    try {
+      _recaptchaVerifier!.clear();
+      print('🧹 reCAPTCHA limpiado');
+    } catch (e) {
+      print('⚠️ Error limpiando reCAPTCHA: $e');
+    }
+    _recaptchaVerifier = null;
+  }
+  
+  // Also clean HTML container if exists
+  if (kIsWeb) {
+    try {
+      final container = html.document.getElementById('recaptcha-container');
+      if (container != null) {
+        container.children.clear();
+      }
+    } catch (e) {
+      print('⚠️ Error limpiando contenedor reCAPTCHA: $e');
+    }
+  }
+}
+
+void _limpiarEstado() {
+  _verificationId = null;
+  _resendToken = null;
+  _confirmationResult = null;
+  _limpiarRecaptcha();
+}
+```
+
+<Note>
+  The system uses an **invisible reCAPTCHA** which appears as a modal only when needed. This provides security without disrupting the user experience.
+</Note>
+
+## Error Handling
+
+<Accordion title="Invalid Phone Number">
+  ```dart
+  case 'invalid-phone-number':
+    mensaje = 'Número de teléfono inválido. Usa formato: +54 9 11 1234-5678';
+    break;
+  ```
+  Make sure your phone number is in correct Argentine format.
+</Accordion>
+
+<Accordion title="Too Many Requests">
+  ```dart
+  case 'too-many-requests':
+    mensaje = 'Demasiados intentos. Intenta más tarde';
+    break;
+  ```
+  Firebase limits SMS requests to prevent abuse. Wait a few minutes before trying again.
+</Accordion>
+
+<Accordion title="Quota Exceeded">
+  ```dart
+  case 'quota-exceeded':
+    mensaje = 'Límite de SMS excedido. Contacta al administrador';
+    break;
+  ```
+  The restaurant's SMS quota may be exhausted. Contact the restaurant.
+</Accordion>
+
+<Accordion title="Invalid Verification Code">
+  ```dart
+  case 'invalid-verification-code':
+    throw Exception('Código incorrecto. Verifica e intenta nuevamente');
+  ```
+  Double-check the code from your SMS and try again.
+</Accordion>
+
+<Accordion title="Session Expired">
+  ```dart
+  case 'session-expired':
+    throw Exception('El código ha expirado. Solicita uno nuevo');
+  ```
+  Codes expire after a certain time. Request a new code.
+</Accordion>
+
+<Accordion title="reCAPTCHA Failed">
+  ```dart
+  case 'captcha-check-failed':
+  case 'invalid-app-credential':
+    onError('Error de verificación. Recarga la página e intenta de nuevo');
+    break;
+  ```
+  This usually happens on web. Refresh the page and try again.
+</Accordion>
+
+## Security Features
+
+<CardGroup cols={2}>
+  <Card title="Phone Ownership" icon="mobile">
+    Only the person with access to the phone can verify the number
+  </Card>
+  <Card title="One-Time Codes" icon="key">
+    Verification codes are single-use and expire quickly
+  </Card>
+  <Card title="Rate Limiting" icon="shield">
+    Firebase limits requests to prevent spam and abuse
+  </Card>
+  <Card title="reCAPTCHA Protection" icon="robot">
+    Web users must pass reCAPTCHA to prevent bots
+  </Card>
+</CardGroup>
+
+## Tips for Successful Verification
+
+- **Use a valid Argentine phone number** (country code +54)
+- **Ensure you can receive SMS** at the number provided
+- **Check your SMS inbox** within 60 seconds of requesting the code
+- **Enter the full 6-digit code** exactly as received
+- **Don't refresh the page** during verification (on web)
+- **If code doesn't arrive**, wait for the timer and request a new code
+- **If you encounter errors**, try:
+  - Checking your phone number format
+  - Waiting a few minutes before retrying
+  - Refreshing the page (on web)
+  - Using a different browser (on web)
+
+## Temporary Session
+
+After verification, a temporary session is created:
+
+```dart
+// Save temporary client session (30 days)
+void guardarSesionCliente(String telefono, String email) {
+  final expiracion = DateTime.now().add(const Duration(days: 30));
+
+  final sesion = {
+    'telefono': normalizarTelefono(telefono),
+    'email': email,
+    'expiracion': expiracion.toIso8601String(),
+  };
+
+  html.window.localStorage[_keyClienteActual] = jsonEncode(sesion);
+}
+
+// Get client session if exists and not expired
+Map<String, dynamic>? obtenerSesionCliente() {
+  final data = html.window.localStorage[_keyClienteActual];
+  if (data == null || data.isEmpty) return null;
+
+  try {
+    final sesion = Map<String, dynamic>.from(jsonDecode(data));
+    final expiracion = DateTime.parse(sesion['expiracion']);
+
+    if (DateTime.now().isAfter(expiracion)) {
+      // Session expired
+      limpiarSesionCliente();
+      return null;
+    }
+
+    return sesion;
+  } catch (e) {
+    return null;
+  }
+}
+```
+
+<Info>
+  The session allows you to make multiple reservations without re-verifying your phone number each time (within 30 days).
+</Info>

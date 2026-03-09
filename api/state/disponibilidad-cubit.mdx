@@ -1,0 +1,375 @@
+---
+title: DisponibilidadCubit
+description: State management for table availability and reservation creation
+---
+
+## Overview
+
+`DisponibilidadCubit` manages the state for searching available tables, viewing business hours, and creating reservations. It handles the entire customer-facing reservation flow including table search by zone, time slot selection, and SMS-verified reservation creation.
+
+**Location:** `lib/presentacion/disponibilidad/disponibilidad_cubit.dart:13`
+
+## Purpose
+
+This Cubit coordinates:
+- Loading restaurant data (business info, tables, operating hours)
+- Searching for available tables in specific zones
+- Managing time slot availability
+- Creating SMS-verified reservations
+- Caching business information for quick access
+
+## State Classes
+
+The Cubit uses the following states defined in `disponibilidad_estados_de_cubit.dart`:
+
+### DisponibilidadInicial
+
+Initial state before any data is loaded.
+
+```dart
+class DisponibilidadInicial extends DisponibilidadState {}
+```
+
+### DisponibilidadCargando
+
+Emitted when loading data or searching for tables.
+
+```dart
+class DisponibilidadCargando extends DisponibilidadState {}
+```
+
+### DisponibilidadExitosa
+
+Emitted when tables and business data are successfully loaded.
+
+```dart
+class DisponibilidadExitosa extends DisponibilidadState {
+  final List<Mesa> mesasDisponibles;
+  final Negocio? negocio;
+  final Map<String, String>? horariosServicio;
+
+  int get duracionPromedioMinutos => negocio?.duracionPromedioMinutos ?? 60;
+  int get maxDiasAnticipacionReserva => negocio?.maxDiasAnticipacionReserva ?? 14;
+  int get minHorasParaCancelar => negocio?.minHorasParaCancelar ?? 24;
+}
+```
+
+**Properties:**
+- `mesasDisponibles`: All tables in the restaurant
+- `negocio`: Business entity with configuration
+- `horariosServicio`: Map of day names to operating hours (e.g., "Lunes": "12:00 - 23:00")
+- Computed properties provide business rules configuration
+
+### MesaEncontrada
+
+Emitted when an available table is found in the requested zone.
+
+```dart
+class MesaEncontrada extends DisponibilidadState {
+  final Mesa mesa;
+  final String zona;
+  final int duracionPromedioMinutos;
+}
+```
+
+**Properties:**
+- `mesa`: The available table found
+- `zona`: Zone name where the table is located
+- `duracionPromedioMinutos`: Reservation duration from business config
+
+### ProcesandoReserva
+
+Emitted while creating the reservation after SMS verification.
+
+```dart
+class ProcesandoReserva extends DisponibilidadState {}
+```
+
+### ReservaCreada
+
+Emitted when reservation is successfully created.
+
+```dart
+class ReservaCreada extends DisponibilidadState {
+  final String mensaje;
+}
+```
+
+### DisponibilidadConError
+
+Emitted when any error occurs.
+
+```dart
+class DisponibilidadConError extends DisponibilidadState {
+  final String mensaje;
+}
+```
+
+## Constructor
+
+```dart
+DisponibilidadCubit()
+  : _mesaRepositorio = getIt<MesaRepositorio>(),
+    _negocioRepositorio = getIt<NegocioRepositorio>(),
+    _crearReserva = getIt<CrearReserva>(),
+    _horarioAperturaRepo = getIt<HorarioAperturaRepositorio>(),
+    super(DisponibilidadInicial());
+```
+
+Dependencies are injected via service locator. Initial state is `DisponibilidadInicial`.
+
+## Key Methods
+
+### cargarTodasLasMesas
+
+Loads all tables, business info, and operating hours for a restaurant.
+
+```dart
+Future<void> cargarTodasLasMesas([String? negocioId]) async
+```
+
+**Parameters:**
+- `negocioId` (optional): Restaurant ID. If null, loads the first available restaurant.
+
+**State Transitions:**
+1. `DisponibilidadCargando` → Loading data
+2. `DisponibilidadExitosa` → Success with data
+3. `DisponibilidadConError` → If error occurs
+
+**Source:** `disponibilidad_cubit.dart:33`
+
+**Implementation Details:**
+- Loads business, tables, and hours in parallel using `Future.wait`
+- Caches business info in `_negocioActual`
+- Converts operating hours to display format
+
+### buscarMesaEnZona
+
+Searches for an available table in a specific zone at the requested time.
+
+```dart
+Future<void> buscarMesaEnZona({
+  required String zona,
+  required DateTime fecha,
+  required DateTime hora,
+  required int numeroPersonas,
+}) async
+```
+
+**Parameters:**
+- `zona`: Zone name to search in (e.g., "Terraza", "Salón")
+- `fecha`: Reservation date
+- `hora`: Reservation time
+- `numeroPersonas`: Party size
+
+**State Transitions:**
+1. `DisponibilidadCargando` → Searching
+2. `MesaEncontrada` → Table found with zone and duration info
+3. `DisponibilidadConError` → No tables available with helpful message
+
+**Source:** `disponibilidad_cubit.dart:96`
+
+### crearReservaVerificadaPorSMS
+
+Creates a confirmed reservation for a customer who has verified their phone via SMS.
+
+```dart
+Future<void> crearReservaVerificadaPorSMS({
+  required String emailCliente,
+  required String telefonoVerificado,
+  required String? nombreCliente,
+  required String mesaId,
+  required DateTime fecha,
+  required DateTime hora,
+  required int numeroPersonas,
+}) async
+```
+
+**Parameters:**
+- `emailCliente`: Customer email for confirmation
+- `telefonoVerificado`: Phone number verified via SMS
+- `nombreCliente`: Customer name (optional)
+- `mesaId`: Table ID to reserve
+- `fecha`: Reservation date
+- `hora`: Reservation time
+- `numeroPersonas`: Party size
+
+**State Transitions:**
+1. `ProcesandoReserva` → Processing
+2. `ReservaCreada` → Success with confirmation message
+3. `DisponibilidadConError` → If creation fails
+
+**Important:** This method creates reservations with `EstadoReserva.confirmada` status since SMS verification is already complete. The `CrearReserva` use case handles:
+- Business rule validation
+- Firestore persistence
+- Email notifications to customer and owner
+
+**Source:** `disponibilidad_cubit.dart:156`
+
+### obtenerZonasDisponibles
+
+Retrieves available zones in the restaurant.
+
+```dart
+Future<List<String>> obtenerZonasDisponibles() async
+```
+
+**Returns:** List of zone names (e.g., ["Terraza", "Salón", "Jardín"])
+
+**Source:** `disponibilidad_cubit.dart:85`
+
+### obtenerIntervalosHorarioNegocio
+
+Gets available time slots for a specific date based on operating hours.
+
+```dart
+Future<List<String>> obtenerIntervalosHorarioNegocio(DateTime fecha) async
+```
+
+**Parameters:**
+- `fecha`: Date to get time slots for
+
+**Returns:** List of time intervals (e.g., ["12:00 - 13:00", "13:00 - 14:00"])
+
+**Source:** `disponibilidad_cubit.dart:138`
+
+## Properties
+
+### negocioActual
+
+Cached business entity for quick access.
+
+```dart
+Negocio? get negocioActual => _negocioActual;
+```
+
+Updated when `cargarTodasLasMesas` is called.
+
+## State Transition Diagram
+
+```
+DisponibilidadInicial
+    ↓ cargarTodasLasMesas()
+DisponibilidadCargando
+    ↓ success
+DisponibilidadExitosa
+    ↓ buscarMesaEnZona()
+DisponibilidadCargando
+    ↓ found
+MesaEncontrada
+    ↓ crearReservaVerificadaPorSMS()
+ProcesandoReserva
+    ↓ success
+ReservaCreada
+
+(Any step can transition to DisponibilidadConError on failure)
+```
+
+## Usage Example
+
+From `disponibilidad_screen.dart:22`:
+
+```dart
+// 1. Create Cubit and load initial data
+BlocProvider(
+  create: (context) => DisponibilidadCubit()..cargarTodasLasMesas(negocioId),
+  child: _DisponibilidadView(negocioId: negocioId),
+)
+
+// 2. Search for available table in zone
+context.read<DisponibilidadCubit>().buscarMesaEnZona(
+  zona: 'Terraza',
+  fecha: DateTime(2024, 3, 15),
+  hora: DateTime(2024, 3, 15, 20, 0), // 8:00 PM
+  numeroPersonas: 4,
+);
+
+// 3. Listen to state changes
+BlocBuilder<DisponibilidadCubit, DisponibilidadState>(
+  builder: (context, state) {
+    if (state is DisponibilidadCargando) {
+      return const CircularProgressIndicator();
+    }
+    
+    if (state is MesaEncontrada) {
+      return _buildMesaCard(
+        state.mesa,
+        state.zona,
+        state.duracionPromedioMinutos,
+      );
+    }
+    
+    if (state is DisponibilidadExitosa) {
+      return _buildBusinessInfo(
+        state.mesasDisponibles,
+        state.negocio,
+        state.horariosServicio,
+      );
+    }
+    
+    return const SizedBox.shrink();
+  },
+)
+
+// 4. Create reservation after SMS verification
+await context.read<DisponibilidadCubit>().crearReservaVerificadaPorSMS(
+  emailCliente: 'cliente@example.com',
+  telefonoVerificado: '+54 9 261 123-4567',
+  nombreCliente: 'Juan Pérez',
+  mesaId: 'mesa_001',
+  fecha: selectedDate,
+  hora: selectedTime,
+  numeroPersonas: 4,
+);
+```
+
+## Integration Points
+
+### With Repositories
+- `MesaRepositorio`: Table queries and availability checks
+- `NegocioRepositorio`: Business information and configuration
+- `HorarioAperturaRepositorio`: Operating hours and time slots
+
+### With Use Cases
+- `CrearReserva`: Reservation creation with business rules and notifications
+
+### With UI Components
+- `DisponibilidadScreen`: Main customer reservation interface
+- Zone selector displays zones from `obtenerZonasDisponibles()`
+- Time picker shows slots from `obtenerIntervalosHorarioNegocio()`
+- SMS verification dialog triggers `crearReservaVerificadaPorSMS()`
+
+## Error Handling
+
+Errors are captured and emitted as `DisponibilidadConError` with user-friendly messages:
+
+```dart
+try {
+  // Operation
+} catch (e) {
+  emit(DisponibilidadConError('Error al cargar los datos: ${e.toString()}'));
+}
+```
+
+The UI can differentiate error types:
+- No tables available: Suggests trying different zone/time
+- Closed hours: Shows operating hours
+- Network errors: Generic error message
+
+## State Management Pattern
+
+This Cubit follows these patterns:
+
+1. **Loading States**: Always emit loading state before async operations
+2. **Error Recovery**: Errors don't crash the app; emit error states
+3. **Data Caching**: Business info cached to avoid redundant loads
+4. **Immutable States**: Each state is a new instance
+5. **Single Responsibility**: Each method handles one specific operation
+
+## Related Documentation
+
+- [MisReservasCubit](/api/state/mis-reservas-cubit) - Managing customer reservations
+- [PantallaDuenoCubit](/api/state/pantalla-dueno-cubit) - Restaurant owner dashboard
+- [Mesa Entity](/api/domain/mesa) - Table entity
+- [Negocio Entity](/api/domain/negocio) - Business entity
+- [CrearReserva Use Case](/api/use-cases/crear-reserva) - Reservation creation logic

@@ -1,0 +1,656 @@
+---
+title: 'Managing Reservations'
+description: 'View, review, and cancel your existing reservations'
+icon: 'list-check'
+---
+
+## Overview
+
+The "Mis Reservas" (My Reservations) screen allows customers to view all their reservations for a specific restaurant after verifying their phone number via SMS.
+
+## Accessing Your Reservations
+
+### Initial Verification Screen
+
+When you first access "Mis Reservas", you'll see a verification prompt:
+
+```dart
+Widget _buildVerificacionInicial() {
+  return Center(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        children: [
+          // Icon
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: Color(0xFF27AE60).withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.event_note, size: 50, color: Color(0xFF27AE60)),
+          ),
+          SizedBox(height: 32),
+          // Title
+          Text('¿Querés ver tus reservas?',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          SizedBox(height: 12),
+          // Subtitle
+          Text(
+            'Verificá tu identidad con SMS para ver las reservas asociadas a tu número de teléfono.',
+            style: TextStyle(fontSize: 16, color: Color(0xFF7F8C8D)),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 40),
+          // Main button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _mostrarDialogoTelefono(context),
+              icon: Icon(Icons.search, size: 22),
+              label: Text('Buscar Mis Reservas', style: TextStyle(fontSize: 18)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFF27AE60),
+                padding: EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+          ),
+          SizedBox(height: 24),
+          // Link to make new reservation
+          TextButton.icon(
+            onPressed: () => context.push('/disponibilidad', extra: widget.negocioId),
+            icon: Icon(Icons.add_circle_outline, color: Color(0xFF3498DB)),
+            label: Text('Hacer una nueva reserva',
+              style: TextStyle(color: Color(0xFF3498DB), fontSize: 16)),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+```
+
+### Phone Number Verification
+
+Click "Buscar Mis Reservas" to enter your phone number:
+
+```dart
+void _mostrarDialogoTelefono(BuildContext context) {
+  final telefonoController = TextEditingController();
+  String? errorTelefono;
+  final servicioVerificacion = getIt<ServicioVerificacionCliente>();
+
+  showDialog(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.phone_android, color: Color(0xFF27AE60)),
+            SizedBox(width: 8),
+            Text('Verificar tu teléfono'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Ingresá tu número de teléfono para verificar tu identidad y ver tus reservas.',
+              style: TextStyle(color: Color(0xFF7F8C8D)),
+            ),
+            SizedBox(height: 20),
+            TextField(
+              controller: telefonoController,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'Teléfono',
+                hintText: 'Ej: 2614567890',
+                prefixIcon: Icon(Icons.phone),
+                prefixText: '+54 ',
+                border: OutlineInputBorder(),
+                errorText: errorTelefono,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final telefono = telefonoController.text.trim();
+              final validacion = servicioVerificacion.validarTelefono(telefono);
+
+              if (!validacion['valido']) {
+                setDialogState(() {
+                  errorTelefono = validacion['error'];
+                });
+                return;
+              }
+
+              Navigator.of(dialogContext).pop();
+              _mostrarVerificacionSMS(context, validacion['formateado']);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(0xFF27AE60),
+            ),
+            child: Text('Enviar SMS'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+```
+
+<Note>
+  Phone numbers are automatically normalized to E.164 format (+54 for Argentina). The system handles various input formats.
+</Note>
+
+### SMS Verification Dialog
+
+After entering your phone number, you'll receive an SMS code. See [SMS Verification](/customers/sms-verification) for details.
+
+### Loading Reservations
+
+Once verified, the system loads your reservations:
+
+```dart
+// From mis_reservas_cubit.dart
+Future<void> cargarReservasFiltradas({
+  required String telefono,
+  required String negocioId,
+}) async {
+  try {
+    emit(MisReservasCargando());
+    _telefonoVerificado = telefono;
+    _negocioId = negocioId;
+
+    final reservas = await _reservaRepositorio.obtenerReservasPorTelefonoYNegocio(
+      telefonoCliente: telefono,
+      negocioId: negocioId,
+    );
+    emit(MisReservasExitoso(reservas));
+  } catch (e) {
+    emit(MisReservasConError('Error al cargar las reservas: ${e.toString()}'));
+  }
+}
+```
+
+```dart
+void _onVerificacionExitosa(String telefono) {
+  final negocioId = widget.negocioId ?? 'default';
+
+  setState(() {
+    _verificado = true;
+  });
+
+  // Load reservations filtered by phone and restaurant
+  context.read<MisReservasCubit>().cargarReservasFiltradas(
+    telefono: telefono,
+    negocioId: negocioId,
+  );
+}
+```
+
+<Info>
+  Reservations are filtered by:
+  - Your verified phone number
+  - The specific restaurant (negocioId)
+  
+  You'll only see reservations you made at this restaurant.
+</Info>
+
+## Viewing Reservations
+
+### Reservation List
+
+Your reservations are displayed as cards:
+
+```dart
+Widget _buildReservasView() {
+  return BlocConsumer<MisReservasCubit, MisReservasState>(
+    listener: (context, state) {
+      if (state is ReservaCancelada) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(state.mensaje),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else if (state is ReservaCancelacionError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(state.mensaje),
+            backgroundColor: Color(0xFFE74C3C),
+          ),
+        );
+      }
+    },
+    builder: (context, state) {
+      if (state is MisReservasCargando) {
+        return Center(child: CircularProgressIndicator());
+      }
+
+      if (state is MisReservasExitoso) {
+        if (state.reservas.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        return ListView.builder(
+          padding: EdgeInsets.all(16.0),
+          itemCount: state.reservas.length,
+          itemBuilder: (context, index) {
+            return _buildReservaCard(context, state.reservas[index]);
+          },
+        );
+      }
+
+      return SizedBox.shrink();
+    },
+  );
+}
+```
+
+### Empty State
+
+If you have no reservations:
+
+```dart
+Widget _buildEmptyState() {
+  return Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.event_busy, size: 80,
+          color: Color(0xFF27AE60).withValues(alpha: 0.5)),
+        SizedBox(height: 24),
+        Text('No tenés reservas',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        SizedBox(height: 12),
+        Text(
+          'No se encontraron reservas asociadas a tu número de teléfono en este restaurante.',
+          style: TextStyle(fontSize: 16, color: Color(0xFF7F8C8D)),
+          textAlign: TextAlign.center,
+        ),
+        SizedBox(height: 32),
+        ElevatedButton(
+          onPressed: () => context.push('/disponibilidad', extra: widget.negocioId),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Color(0xFF27AE60),
+            padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          ),
+          child: Text('Hacer una Reserva'),
+        ),
+      ],
+    ),
+  );
+}
+```
+
+### Reservation Card
+
+Each reservation shows:
+
+```dart
+Widget _buildReservaCard(BuildContext context, Reserva reserva) {
+  final dateFormat = DateFormat('dd/MM/yyyy');
+  final timeFormat = DateFormat('HH:mm');
+
+  return Card(
+    elevation: 3,
+    margin: EdgeInsets.only(bottom: 16),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    child: Padding(
+      padding: EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with ID and status badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Reserva #${reserva.id.substring(0, 8)}',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              BadgeEstado(
+                texto: getEstadoTexto(reserva.estado),
+                color: getEstadoColor(reserva.estado),
+                icon: getEstadoIcono(reserva.estado),
+              ),
+            ],
+          ),
+          Divider(height: 24),
+          // Reservation details
+          _buildInfoRow(Icons.calendar_today, 'Fecha',
+            dateFormat.format(reserva.fechaHora)),
+          SizedBox(height: 12),
+          _buildInfoRow(Icons.access_time, 'Hora',
+            timeFormat.format(reserva.fechaHora)),
+          SizedBox(height: 12),
+          _buildInfoRow(Icons.table_restaurant, 'Mesa',
+            _NombreMesa(mesaId: reserva.mesaId)),
+          SizedBox(height: 12),
+          _buildInfoRow(Icons.people, 'Personas',
+            '${reserva.numeroPersonas}'),
+          // Action buttons (if not finalized)
+          if (!reserva.fechaHora.isBefore(DateTime.now()) &&
+              reserva.estado != EstadoReserva.cancelada) ..[
+            SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showDetalleDialog(context, reserva),
+                    icon: Icon(Icons.info_outline),
+                    label: Text('Detalles'),
+                  ),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showCancelarDialog(context, reserva.id),
+                    icon: Icon(Icons.cancel),
+                    label: Text('Cancelar'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color(0xFFE74C3C),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          // Finalized label
+          if (reserva.fechaHora.isBefore(DateTime.now()) &&
+              reserva.estado != EstadoReserva.cancelada) ..[
+            SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.grey[600]),
+                  SizedBox(width: 8),
+                  Text('Reserva Finalizada',
+                    style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+```
+
+### Reservation Status
+
+Reservations can have three states:
+
+<CardGroup cols={3}>
+  <Card title="Confirmada" icon="check-circle" color="#27AE60">
+    Reservation is confirmed and active
+  </Card>
+  <Card title="Pendiente" icon="clock" color="#F39C12">
+    Awaiting confirmation (rarely used)
+  </Card>
+  <Card title="Cancelada" icon="times-circle" color="#E74C3C">
+    Reservation has been cancelled
+  </Card>
+</CardGroup>
+
+```dart
+Color getEstadoColor(EstadoReserva estado) {
+  switch (estado) {
+    case EstadoReserva.confirmada:
+      return const Color(0xFF27AE60);
+    case EstadoReserva.pendiente:
+      return const Color(0xFFF39C12);
+    case EstadoReserva.cancelada:
+      return const Color(0xFFE74C3C);
+  }
+}
+
+String getEstadoTexto(EstadoReserva estado) {
+  switch (estado) {
+    case EstadoReserva.confirmada:
+      return 'Confirmada';
+    case EstadoReserva.pendiente:
+      return 'Pendiente';
+    case EstadoReserva.cancelada:
+      return 'Cancelada';
+  }
+}
+
+IconData getEstadoIcono(EstadoReserva estado) {
+  switch (estado) {
+    case EstadoReserva.confirmada:
+      return Icons.check_circle;
+    case EstadoReserva.pendiente:
+      return Icons.schedule;
+    case EstadoReserva.cancelada:
+      return Icons.cancel;
+  }
+}
+```
+
+## Viewing Reservation Details
+
+Click "Detalles" to see full reservation information:
+
+```dart
+void _showDetalleDialog(BuildContext context, Reserva reserva) {
+  final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
+
+  showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text('Detalles de la Reserva'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('ID: ${reserva.id}'),
+          SizedBox(height: 8),
+          Text('Fecha y Hora: ${dateFormat.format(reserva.fechaHora)}'),
+          SizedBox(height: 8),
+          Row(
+            children: [
+              Text('Mesa: '),
+              _NombreMesa(mesaId: reserva.mesaId),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text('Número de Personas: ${reserva.numeroPersonas}'),
+          SizedBox(height: 8),
+          Text('Cliente: ${reserva.nombreCliente ?? reserva.contactoCliente ?? "Sin datos"}'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text('Cerrar'),
+        ),
+      ],
+    ),
+  );
+}
+```
+
+## Canceling Reservations
+
+### Cancellation Dialog
+
+Click "Cancelar" to cancel a reservation:
+
+```dart
+void _showCancelarDialog(BuildContext context, String reservaId) {
+  showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text('Cancelar Reserva'),
+      content: Text(
+        '¿Estás seguro de que deseas cancelar esta reserva?\n\n'
+        'Esta acción no se puede deshacer.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text('No, mantener'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.of(dialogContext).pop();
+            context.read<MisReservasCubit>().cancelarReserva(reservaId);
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Color(0xFFE74C3C),
+          ),
+          child: Text('Sí, cancelar'),
+        ),
+      ],
+    ),
+  );
+}
+```
+
+### Cancellation Logic
+
+```dart
+// From mis_reservas_cubit.dart
+Future<void> cancelarReserva(String reservaId) async {
+  try {
+    emit(MisReservasCargando());
+
+    final idNegocio = _negocioId ?? 'default';
+    await _cancelarReserva.ejecutar(reservaId, negocioId: idNegocio);
+
+    emit(ReservaCancelada('Reserva cancelada exitosamente'));
+    
+    // Reload filtered reservations
+    await recargarReservas();
+  } catch (e) {
+    emit(ReservaCancelacionError('Error al cancelar: ${e.toString().replaceAll("Exception: ", "")}'));
+    try { await recargarReservas(); } catch (_) {}
+  }
+}
+
+Future<void> recargarReservas() async {
+  if (_telefonoVerificado != null && _negocioId != null) {
+    await cargarReservasFiltradas(
+      telefono: _telefonoVerificado!,
+      negocioId: _negocioId!,
+    );
+  }
+}
+```
+
+<Note>
+  After cancellation, the reservation list is automatically reloaded to show the updated status.
+</Note>
+
+## Reservation States
+
+### Active Reservations
+
+Reservations that haven't occurred yet and aren't cancelled show:
+- **Detalles** button to view full information
+- **Cancelar** button to cancel the reservation
+
+### Finalized Reservations
+
+Reservations in the past (but not cancelled) show:
+- "Reserva Finalizada" label
+- No action buttons
+
+### Cancelled Reservations
+
+Cancelled reservations show:
+- Red "Cancelada" badge
+- No action buttons
+
+## Table Name Resolution
+
+Table names are fetched asynchronously:
+
+```dart
+class _NombreMesa extends StatelessWidget {
+  final String mesaId;
+
+  const _NombreMesa({required this.mesaId});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: getIt<MesaRepositorio>().obtenerMesaPorId(mesaId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return SizedBox();
+        }
+
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
+          return Text(mesaId,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600));
+        }
+
+        final mesa = snapshot.data!;
+        return Text(
+          mesa.nombre.isNotEmpty ? mesa.nombre : mesaId,
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        );
+      },
+    );
+  }
+}
+```
+
+<Info>
+  If the table name can't be loaded, the system falls back to displaying the table ID.
+</Info>
+
+## Error Handling
+
+<Accordion title="Loading Error">
+  If reservations can't be loaded:
+  ```dart
+  if (state is MisReservasConError) {
+    return Center(
+      child: Column(
+        children: [
+          Icon(Icons.error_outline, color: Color(0xFFE74C3C), size: 64),
+          Text(state.mensaje),
+          ElevatedButton(
+            onPressed: () => context.read<MisReservasCubit>().recargarReservas(),
+            child: Text('Reintentar'),
+          ),
+        ],
+      ),
+    );
+  }
+  ```
+</Accordion>
+
+<Accordion title="Cancellation Error">
+  If cancellation fails:
+  ```dart
+  listener: (context, state) {
+    if (state is ReservaCancelacionError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(state.mensaje),
+          backgroundColor: Color(0xFFE74C3C),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+  ```
+</Accordion>

@@ -1,0 +1,370 @@
+---
+title: ReservaRepositorio
+description: Repository interface and Firestore implementation for managing restaurant reservations
+---
+
+## Overview
+
+The `ReservaRepositorio` defines the contract for reservation management operations, including creating, updating, canceling reservations, and checking table availability. The Firestore implementation (`ReservaRepositorioFirestore`) provides persistent storage using Cloud Firestore.
+
+## Interface
+
+```dart lib/dominio/repositorios/reserva_repositorio.dart
+abstract class ReservaRepositorio {
+  Future<Reserva> crearReserva(Reserva reserva);
+  Future<List<Reserva>> obtenerReserva();
+  Future<void> cancelarReserva(String reservaId);
+  Future<void> actualizarReserva(Reserva reserva);
+  Future<Reserva?> obtenerReservaPorId(String reservaId);
+  
+  Future<List<Reserva>> obtenerReservasPorMesaYHorario({
+    required String mesaId,
+    required DateTime fecha,
+    required DateTime hora,
+  });
+  
+  Future<bool> mesaDisponible({
+    required String mesaId,
+    required DateTime fecha,
+    required DateTime hora,
+    required int duracionMinutos,
+  });
+  
+  Future<List<Reserva>> obtenerReservasPorTelefonoYNegocio({
+    required String telefonoCliente,
+    required String negocioId,
+  });
+}
+```
+
+## Methods
+
+### crearReserva
+
+Creates a new reservation in the system.
+
+<ParamField path="reserva" type="Reserva" required>
+  The reservation object to create. The ID will be generated automatically.
+</ParamField>
+
+<ResponseField name="Future<Reserva>" type="Reserva">
+  Returns the created reservation with its assigned ID from Firestore.
+</ResponseField>
+
+**Implementation Details:**
+- Converts the `Reserva` entity to a Firestore-compatible map
+- Adds timestamps (`createdAt`, `updatedAt`) using server timestamp
+- Returns a copy of the reservation with the generated document ID
+
+```dart Example Usage
+final nuevaReserva = Reserva(
+  id: '', // Will be auto-generated
+  mesaId: 'mesa_123',
+  fechaHora: DateTime(2026, 3, 15, 20, 0),
+  numeroPersonas: 4,
+  duracionMinutos: 90,
+  nombreCliente: 'Juan Pérez',
+  telefonoCliente: '+34612345678',
+  negocioId: 'negocio_abc',
+);
+
+final reservaCreada = await repositorio.crearReserva(nuevaReserva);
+print('Reserva creada con ID: ${reservaCreada.id}');
+```
+
+---
+
+### obtenerReserva
+
+Retrieves all reservations from the system, ordered by date and time (most recent first).
+
+<ResponseField name="Future<List<Reserva>>" type="List<Reserva>">
+  Returns a list of all reservations, sorted by `fechaHora` in descending order. Returns an empty list if there's an error.
+</ResponseField>
+
+```dart Example Usage
+final todasReservas = await repositorio.obtenerReserva();
+print('Total de reservas: ${todasReservas.length}');
+```
+
+---
+
+### cancelarReserva
+
+Cancels an existing reservation by updating its status to "cancelada".
+
+<ParamField path="reservaId" type="String" required>
+  The ID of the reservation to cancel.
+</ParamField>
+
+<ResponseField name="Future<void>" type="void">
+  Completes when the reservation has been canceled. Throws an exception if the operation fails.
+</ResponseField>
+
+**Implementation Details:**
+- Updates only the `estado` field to 'cancelada'
+- Updates the `updatedAt` timestamp
+- Does not delete the reservation document (soft delete)
+
+```dart Example Usage
+try {
+  await repositorio.cancelarReserva('reserva_xyz');
+  print('Reserva cancelada exitosamente');
+} catch (e) {
+  print('Error al cancelar: $e');
+}
+```
+
+---
+
+### actualizarReserva
+
+Updates an existing reservation's details.
+
+<ParamField path="reserva" type="Reserva" required>
+  The reservation object with updated information. Must include a valid ID.
+</ParamField>
+
+<ResponseField name="Future<void>" type="void">
+  Completes when the update is successful. Throws an exception on failure.
+</ResponseField>
+
+**Updated Fields:**
+- `estado` - Reservation status
+- `numeroPersonas` - Number of guests
+- `contactoCliente` - Client contact email
+- `nombreCliente` - Client name
+- `updatedAt` - Timestamp (auto-updated)
+
+```dart Example Usage
+final reserva = await repositorio.obtenerReservaPorId('reserva_xyz');
+if (reserva != null) {
+  final actualizada = reserva.copyWith(numeroPersonas: 6);
+  await repositorio.actualizarReserva(actualizada);
+}
+```
+
+---
+
+### obtenerReservaPorId
+
+Retrieves a specific reservation by its ID.
+
+<ParamField path="reservaId" type="String" required>
+  The unique identifier of the reservation.
+</ParamField>
+
+<ResponseField name="Future<Reserva?>" type="Reserva?">
+  Returns the reservation if found, or `null` if it doesn't exist or there's an error.
+</ResponseField>
+
+```dart Example Usage
+final reserva = await repositorio.obtenerReservaPorId('reserva_xyz');
+if (reserva != null) {
+  print('Reserva encontrada: ${reserva.nombreCliente}');
+} else {
+  print('Reserva no encontrada');
+}
+```
+
+---
+
+### obtenerReservasPorMesaYHorario
+
+Retrieves all active reservations (confirmed or pending) for a specific table on a given date.
+
+<ParamField path="mesaId" type="String" required>
+  The ID of the table to check.
+</ParamField>
+
+<ParamField path="fecha" type="DateTime" required>
+  The date to check (time component is ignored, checks entire day).
+</ParamField>
+
+<ParamField path="hora" type="DateTime" required>
+  The time to check (currently used for context, but queries entire day).
+</ParamField>
+
+<ResponseField name="Future<List<Reserva>>" type="List<Reserva>">
+  Returns all non-canceled reservations for the table on the specified date.
+</ResponseField>
+
+**Implementation Details:**
+- Queries reservations from midnight to midnight of the specified date
+- Filters out canceled reservations (`estado != EstadoReserva.cancelada`)
+- Uses Firestore composite queries on `mesaId` and `fechaHora`
+
+```dart Example Usage
+final fecha = DateTime(2026, 3, 15);
+final hora = DateTime(2026, 3, 15, 20, 0);
+
+final reservas = await repositorio.obtenerReservasPorMesaYHorario(
+  mesaId: 'mesa_123',
+  fecha: fecha,
+  hora: hora,
+);
+
+print('Reservas activas para la mesa: ${reservas.length}');
+```
+
+---
+
+### mesaDisponible
+
+Checks if a table is available for a specific time slot, considering the duration of the reservation and detecting time collisions with existing reservations.
+
+<ParamField path="mesaId" type="String" required>
+  The ID of the table to check.
+</ParamField>
+
+<ParamField path="fecha" type="DateTime" required>
+  The date of the potential reservation.
+</ParamField>
+
+<ParamField path="hora" type="DateTime" required>
+  The start time of the potential reservation.
+</ParamField>
+
+<ParamField path="duracionMinutos" type="int" required>
+  The duration of the reservation in minutes.
+</ParamField>
+
+<ResponseField name="Future<bool>" type="bool">
+  Returns `true` if the table is available, `false` if there's a time collision with existing reservations.
+</ResponseField>
+
+**Collision Detection Algorithm:**
+1. Calculates the time range for the new reservation: `[hora, hora + duracionMinutos]`
+2. Retrieves all active reservations for the table on that date
+3. For each existing reservation, calculates its time range: `[fechaHora, horaFin]`
+4. Checks if intervals overlap: `horaInicioNueva < horaFinExistente AND horaFinNueva > horaInicioExistente`
+5. Returns `false` if any collision is detected, `true` otherwise
+
+```dart Example Usage
+final disponible = await repositorio.mesaDisponible(
+  mesaId: 'mesa_123',
+  fecha: DateTime(2026, 3, 15),
+  hora: DateTime(2026, 3, 15, 20, 0),
+  duracionMinutos: 90,
+);
+
+if (disponible) {
+  print('Mesa disponible para reservar');
+} else {
+  print('Mesa ocupada en ese horario');
+}
+```
+
+---
+
+### obtenerReservasPorTelefonoYNegocio
+
+Retrieves all reservations made by a specific phone number at a particular restaurant.
+
+<ParamField path="telefonoCliente" type="String" required>
+  The client's phone number (must match exactly).
+</ParamField>
+
+<ParamField path="negocioId" type="String" required>
+  The restaurant's unique identifier.
+</ParamField>
+
+<ResponseField name="Future<List<Reserva>>" type="List<Reserva>">
+  Returns all reservations for the phone number at that restaurant, ordered by date (most recent first).
+</ResponseField>
+
+**Use Cases:**
+- Display client's reservation history
+- Verify client identity for modifications
+- Check for duplicate reservations
+
+```dart Example Usage
+final historial = await repositorio.obtenerReservasPorTelefonoYNegocio(
+  telefonoCliente: '+34612345678',
+  negocioId: 'negocio_abc',
+);
+
+print('Cliente tiene ${historial.length} reservas en este restaurante');
+for (final reserva in historial) {
+  print('- ${reserva.fechaHora}: ${reserva.estado}');
+}
+```
+
+---
+
+## Firestore Implementation
+
+### Collection Structure
+
+Reservations are stored in the `reservas` collection with the following schema:
+
+```json Firestore Document
+{
+  "mesaId": "mesa_123",
+  "fechaHora": Timestamp,
+  "numeroPersonas": 4,
+  "duracionMinutos": 90,
+  "estado": "confirmada",
+  "contactoCliente": "juan@example.com",
+  "nombreCliente": "Juan Pérez",
+  "telefonoCliente": "+34612345678",
+  "negocioId": "negocio_abc",
+  "createdAt": Timestamp,
+  "updatedAt": Timestamp
+}
+```
+
+### Estado Enum Mapping
+
+| Dart Enum | Firestore String |
+|-----------|------------------|
+| `EstadoReserva.pendiente` | `"pendiente"` |
+| `EstadoReserva.confirmada` | `"confirmada"` |
+| `EstadoReserva.cancelada` | `"cancelada"` |
+
+### Required Firestore Indexes
+
+For optimal query performance, create these composite indexes:
+
+1. **Mesa and Date Range Query**
+   - Collection: `reservas`
+   - Fields: `mesaId` (Ascending), `fechaHora` (Ascending)
+
+2. **Phone and Business Query**
+   - Collection: `reservas`
+   - Fields: `telefonoCliente` (Ascending), `negocioId` (Ascending), `fechaHora` (Descending)
+
+---
+
+## Related Types
+
+### Reserva Entity
+
+```dart
+class Reserva {
+  final String id;
+  final String mesaId;
+  final DateTime fechaHora;
+  final int numeroPersonas;
+  final int duracionMinutos;
+  EstadoReserva estado;
+  final String? contactoCliente;
+  final String? nombreCliente;
+  final String? telefonoCliente;
+  final String? negocioId;
+  
+  DateTime get horaFin => fechaHora.add(Duration(minutes: duracionMinutos));
+}
+
+enum EstadoReserva {
+  pendiente,
+  confirmada,
+  cancelada,
+}
+```
+
+## See Also
+
+- [MesaRepositorio](/api/repositories/mesa-repositorio) - Table management operations
+- [NegocioRepositorio](/api/repositories/negocio-repositorio) - Restaurant management
+- [HorarioAperturaRepositorio](/api/repositories/horario-apertura-repositorio) - Business hours validation

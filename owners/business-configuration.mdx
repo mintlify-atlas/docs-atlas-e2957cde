@@ -1,0 +1,669 @@
+---
+title: 'Business Configuration'
+description: 'Configure business hours, cancellation policies, and reservation duration settings'
+icon: 'gear'
+---
+
+## Overview
+
+Business configuration allows restaurant owners to customize operational rules that govern reservations, including business hours, cancellation policies, and table timing.
+
+## Business Entity Structure
+
+The `Negocio` (Business) entity stores all configuration:
+
+```dart
+class Negocio {
+  final String id;
+  final String nombre;                    // Restaurant name
+  final String nombreResponsable;         // Owner name
+  final String email;                     // Contact email
+  final String telefono;                  // Contact phone
+  final String direccion;                 // Physical address
+  final String descripcion;               // Description
+  final String especialidad;              // Specialty/cuisine
+  final String icono;                     // Icon identifier
+  
+  // Business Rules Configuration
+  final int minHorasParaCancelar;         // Cancellation notice hours
+  final int maxDiasAnticipacionReserva;   // Max days to book ahead
+  final int duracionPromedioMinutos;      // Default reservation duration
+  
+  // Zones and Status
+  final List<String> zonas;               // Table zones
+  final bool telefonoVerificado;          // Phone verification status
+}
+```
+
+Implementation: `source/lib/dominio/entidades/negocio.dart`
+
+## Default Configuration
+
+Every new business starts with sensible defaults:
+
+```dart
+Negocio({
+  minHorasParaCancelar: 24,              // 24 hours notice
+  maxDiasAnticipacionReserva: 14,        // 2 weeks advance booking
+  duracionPromedioMinutos: 60,           // 1 hour per reservation
+  zonas: const ['Salón', 'Terraza'],     // Default zones
+  telefonoVerificado: false,
+  // ...
+});
+```
+
+Implementation reference: `source/lib/dominio/entidades/negocio.dart:21-36`
+
+## Reservation Duration Settings
+
+Control how long tables are reserved for each booking.
+
+### Configuring Default Duration
+
+```dart
+final cubit = context.read<PantallaDuenoCubit>();
+
+final success = await cubit.actualizarConfiguracionReglas(
+  negocio,
+  duracionPromedioMinutos: 90,  // 1.5 hours
+  minHorasParaCancelar: 24,
+  maxDiasAnticipacionReserva: 14,
+);
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:229-255`
+
+### Duration Recommendations
+
+<Tabs>
+  <Tab title="Quick Service">
+    **45-60 minutes**
+    
+    Suitable for:
+    - Casual dining
+    - Lunch service
+    - Fast-casual restaurants
+    - Cafés
+    
+    ```dart
+    duracionPromedioMinutos: 45
+    ```
+  </Tab>
+  
+  <Tab title="Standard Dining">
+    **60-90 minutes**
+    
+    Suitable for:
+    - Full-service restaurants
+    - Family dining
+    - Most dinner services
+    
+    ```dart
+    duracionPromedioMinutos: 60  // Default
+    ```
+  </Tab>
+  
+  <Tab title="Fine Dining">
+    **90-120 minutes**
+    
+    Suitable for:
+    - Upscale restaurants
+    - Multi-course meals
+    - Special occasion dining
+    - Tasting menus
+    
+    ```dart
+    duracionPromedioMinutos: 120
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+Reservation duration affects table turnover and availability. Longer durations mean fewer reservations per table per day.
+</Info>
+
+## Cancellation Policy
+
+Set minimum notice required for cancellations.
+
+### Minimum Cancellation Hours
+
+```dart
+final success = await cubit.actualizarConfiguracionReglas(
+  negocio,
+  duracionPromedioMinutos: 60,
+  minHorasParaCancelar: 48,  // 48 hours notice
+  maxDiasAnticipacionReserva: 14,
+);
+```
+
+### Common Policies
+
+| Notice Period | Use Case | Description |
+|---------------|----------|-------------|
+| **2 hours** | Lenient | Allows last-minute cancellations |
+| **24 hours** | Standard (default) | Industry standard policy |
+| **48 hours** | Strict | For high-demand restaurants |
+| **72 hours** | Very strict | For special events or tasting menus |
+
+<Warning>
+**Customer Experience**: Stricter cancellation policies may improve no-show rates but could discourage bookings. Balance is important.
+</Warning>
+
+### Enforcement
+
+The cancellation policy is enforced in the reservation cancellation flow:
+
+```dart
+// Customer attempting to cancel
+final horasDeAnticipacion = reserva.fechaHora
+  .difference(DateTime.now())
+  .inHours;
+
+if (horasDeAnticipacion < negocio.minHorasParaCancelar) {
+  throw Exception(
+    'Debe cancelar con al menos ${negocio.minHorasParaCancelar} '
+    'horas de anticipación'
+  );
+}
+```
+
+<Tip>
+Business owners can cancel reservations at any time regardless of the policy, but customer cancellations respect the configured minimum notice.
+</Tip>
+
+## Advance Booking Window
+
+Control how far in advance customers can make reservations.
+
+### Maximum Days Ahead
+
+```dart
+final success = await cubit.actualizarConfiguracionReglas(
+  negocio,
+  duracionPromedioMinutos: 60,
+  minHorasParaCancelar: 24,
+  maxDiasAnticipacionReserva: 30,  // 30 days ahead
+);
+```
+
+### Booking Window Strategies
+
+<AccordionGroup>
+  <Accordion title="7 Days - Short Window" icon="calendar-week">
+    **Best for:**
+    - Restaurants with frequent menu changes
+    - Small establishments
+    - Highly variable schedules
+    
+    **Pros:**
+    - More flexibility in scheduling
+    - Easier to manage staff schedules
+    
+    **Cons:**
+    - May lose customers who plan ahead
+    - Less predictable revenue
+  </Accordion>
+  
+  <Accordion title="14 Days - Standard (Default)" icon="calendar-days">
+    **Best for:**
+    - Most restaurants
+    - Balanced planning needs
+    - Standard operations
+    
+    **Pros:**
+    - Good balance of planning and flexibility
+    - Industry standard
+    
+    **Cons:**
+    - May not suit special use cases
+  </Accordion>
+  
+  <Accordion title="30 Days - Extended Window" icon="calendar">
+    **Best for:**
+    - Fine dining establishments
+    - Special occasion restaurants
+    - Highly sought-after venues
+    
+    **Pros:**
+    - Allows customers to plan special events
+    - Better revenue forecasting
+    
+    **Cons:**
+    - Higher cancellation risk
+    - Less flexibility for changes
+  </Accordion>
+  
+  <Accordion title="60-90 Days - Long Window" icon="calendar-range">
+    **Best for:**
+    - Event venues
+    - Michelin-starred restaurants
+    - Destination restaurants
+    
+    **Pros:**
+    - Accommodates travel planning
+    - Premium positioning
+    
+    **Cons:**
+    - Significant advance commitment
+    - Staff scheduling complexity
+  </Accordion>
+</AccordionGroup>
+
+## Business Hours Configuration
+
+Define when your restaurant is open for reservations.
+
+### Hours Structure
+
+Business hours are managed separately through the `HorarioApertura` entity:
+
+```dart
+class HorarioApertura {
+  final String negocioId;
+  final List<HorarioDia> horariosSemanal;
+}
+
+class HorarioDia {
+  final String nombreDia;      // "Lunes", "Martes", etc.
+  final bool cerrado;           // Is restaurant closed?
+  final List<IntervaloHorario> intervalos;  // Multiple time intervals
+}
+
+class IntervaloHorario {
+  final int horaInicio;         // 0-23
+  final int minutoInicio;       // 0-59
+  final int horaFin;            // 0-23
+  final int minutoFin;          // 0-59
+}
+```
+
+Implementation: `source/lib/dominio/entidades/horario_apertura.dart`
+
+### Configuring Hours
+
+```dart
+final cubit = context.read<PantallaDuenoCubit>();
+
+// Get current hours
+final horariosActuales = await cubit.obtenerHorarios(negocioId);
+
+// Update hours
+final nuevosHorarios = {
+  'lunes': '12:00-15:00,19:00-23:00',     // Lunch & dinner
+  'martes': '12:00-15:00,19:00-23:00',
+  'miércoles': '12:00-15:00,19:00-23:00',
+  'jueves': '12:00-15:00,19:00-23:00',
+  'viernes': '12:00-15:00,19:00-00:00',   // Late Friday
+  'sábado': '12:00-00:00',                // All day Saturday
+  'domingo': 'Cerrado',                    // Closed Sunday
+};
+
+final success = await cubit.actualizarHorarios(negocioId, nuevosHorarios);
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:187-204`
+
+### Multiple Service Periods
+
+Restaurants can define multiple time intervals per day:
+
+```dart
+// Lunch and dinner service
+'lunes': '12:00-15:00,19:00-23:00'
+
+// Continuous service
+'sábado': '11:00-23:00'
+
+// Closed
+'domingo': 'Cerrado'
+```
+
+<Info>
+The system automatically prevents reservations outside configured business hours.
+</Info>
+
+### Validation Example
+
+```dart
+final horario = await horarioAperturaRepositorio
+  .obtenerHorarioPorNegocio(negocioId);
+
+if (!horario.estaAbiertoEn(fechaReserva)) {
+  final mensaje = horario.obtenerMensajeError(fechaReserva);
+  throw Exception(mensaje);
+}
+
+// Example error messages:
+// "El restaurante está cerrado los domingos."
+// "El horario seleccionado (16:30) está fuera del horario de atención.
+//  Lunes: 12:00 - 15:00 y 19:00 - 23:00"
+```
+
+Implementation reference: `source/lib/dominio/entidades/horario_apertura.dart:79-112`
+
+## Zone Configuration
+
+Organize tables into zones or sections.
+
+### Default Zones
+
+Every restaurant starts with two default zones:
+
+```dart
+final zonas = ['Salón', 'Terraza'];
+```
+
+### Adding Custom Zones
+
+```dart
+final cubit = context.read<PantallaDuenoCubit>();
+
+final nuevasZonas = [
+  'Salón Principal',
+  'Terraza',
+  'Bar',
+  'Área VIP',
+  'Sala Privada',
+  'Jardín',
+  'Patio Interior',
+];
+
+final success = await cubit.actualizarZonas(negocio, nuevasZonas);
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:104-116`
+
+### Zone Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Descriptive Names" icon="tag">
+    Use clear, customer-facing names:
+    - ✅ "Terraza con Vista"
+    - ✅ "Salón Principal"
+    - ❌ "Zona A"
+    - ❌ "Sector 1"
+  </Card>
+  
+  <Card title="Logical Grouping" icon="layer-group">
+    Group by customer preference:
+    - Indoor vs Outdoor
+    - Quiet vs Lively
+    - Standard vs VIP
+    - Smoking vs Non-smoking (if applicable)
+  </Card>
+  
+  <Card title="Consistent Usage" icon="check-double">
+    Apply zones consistently:
+    - All tables should have a zone
+    - Zone names should be standardized
+    - Update when layout changes
+  </Card>
+  
+  <Card title="Customer Choice" icon="hand-pointer">
+    Enable zone preferences:
+    - Customers can request specific zones
+    - System filters tables by zone
+    - Improves customer satisfaction
+  </Card>
+</CardGroup>
+
+## Restaurant Information
+
+Update basic restaurant details from the admin panel.
+
+### Editable Fields
+
+All business information can be updated:
+
+<Tabs>
+  <Tab title="Restaurant Name">
+    ```dart
+    await cubit.actualizarNombre(negocio, 'Nuevo Nombre');
+    ```
+    
+    The restaurant name appears in:
+    - Admin panel header
+    - Customer-facing reservation confirmations
+    - Email notifications
+  </Tab>
+  
+  <Tab title="Contact Email">
+    ```dart
+    // Requires password verification
+    await cubit.negocioRepositorio.actualizarEmail(
+      negocio.id,
+      'newemail@restaurant.com',
+    );
+    ```
+    
+    Email is used for:
+    - Business owner notifications
+    - Customer contact information
+    - Account recovery
+  </Tab>
+  
+  <Tab title="Phone Number">
+    ```dart
+    await cubit.actualizarTelefono(negocio, '+54 9 261 123-4567');
+    ```
+    
+    <Warning>
+    Changing the phone number resets verification status. You'll need to reverify the new number.
+    </Warning>
+  </Tab>
+  
+  <Tab title="Address">
+    ```dart
+    final negocioActualizado = negocio.copyWith(
+      direccion: 'Calle Nueva 123, Mendoza',
+    );
+    await cubit.negocioRepositorio.actualizarNegocio(negocioActualizado);
+    ```
+  </Tab>
+  
+  <Tab title="Specialty">
+    ```dart
+    await cubit.actualizarEspecialidad(negocio, 'Cocina Mediterránea');
+    ```
+    
+    Examples:
+    - "Parrilla Argentina"
+    - "Cocina Italiana"
+    - "Sushi & Asian Fusion"
+    - "Cocina de Autor"
+  </Tab>
+  
+  <Tab title="Description">
+    ```dart
+    await cubit.actualizarDescripcion(
+      negocio,
+      'Restaurante familiar con más de 20 años de tradición...'
+    );
+    ```
+    
+    <Info>
+    Description is limited to **300 characters** maximum.
+    </Info>
+  </Tab>
+</Tabs>
+
+## Restaurant Story
+
+Create a compelling narrative about your restaurant's history and philosophy.
+
+### Story Entity
+
+```dart
+class HistoriaRestaurante {
+  final String titulo;              // Story title
+  final String contenido;           // Full story content
+  final List<String> imagenes;      // Image URLs
+}
+```
+
+Implementation: `source/lib/dominio/entidades/historia_restaurante.dart`
+
+### Managing Story Content
+
+```dart
+final cubit = context.read<PantallaDuenoCubit>();
+
+// Get current story
+final historia = await cubit.obtenerHistoria(negocioId);
+
+// Update story
+final nuevaHistoria = HistoriaRestaurante(
+  titulo: 'Nuestra Historia',
+  contenido: '''
+    Fundado en 1995, nuestro restaurante ha sido un punto de referencia
+    en la gastronomía local. Combinamos recetas tradicionales con
+    técnicas modernas para crear una experiencia única...
+  ''',
+  imagenes: [
+    'https://example.com/restaurant-exterior.jpg',
+    'https://example.com/chef-team.jpg',
+  ],
+);
+
+final success = await cubit.guardarHistoria(negocioId, nuevaHistoria);
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:207-226`
+
+### Story Writing Tips
+
+<AccordionGroup>
+  <Accordion title="Authentic Voice" icon="microphone">
+    Write in your restaurant's authentic voice:
+    - Share genuine passion for food
+    - Tell the founding story
+    - Highlight what makes you unique
+  </Accordion>
+  
+  <Accordion title="Customer Focus" icon="users">
+    Focus on customer experience:
+    - Describe ambiance and atmosphere
+    - Mention signature dishes
+    - Explain your culinary philosophy
+  </Accordion>
+  
+  <Accordion title="Visual Support" icon="image">
+    Include compelling images:
+    - Restaurant exterior and interior
+    - Signature dishes
+    - Chef and team
+    - Historic photos if applicable
+  </Accordion>
+  
+  <Accordion title="Concise Content" icon="align-left">
+    Keep it engaging but concise:
+    - 200-500 words is ideal
+    - Use paragraphs for readability
+    - Highlight key information
+  </Accordion>
+</AccordionGroup>
+
+## Configuration Persistence
+
+All configuration is stored in Firestore:
+
+```javascript
+negocios/
+  {negocioId}/
+    nombre: "La Cocina"
+    email: "owner@laccocina.com"
+    telefono: "+54 9 261 123-4567"
+    direccion: "Calle Ejemplo 123"
+    especialidad: "Cocina Mediterránea"
+    descripcion: "Restaurante familiar..."
+    icono: "restaurant"
+    minHorasParaCancelar: 24
+    maxDiasAnticipacionReserva: 14
+    duracionPromedioMinutos: 60
+    zonas: ["Salón", "Terraza", "Bar"]
+    telefonoVerificado: true
+
+horarios_apertura/
+  {negocioId}/
+    lunes: "12:00-15:00,19:00-23:00"
+    martes: "12:00-15:00,19:00-23:00"
+    // ... other days
+
+historias/
+  {negocioId}/
+    titulo: "Nuestra Historia"
+    contenido: "Texto completo..."
+    imagenes: ["url1", "url2"]
+```
+
+## Troubleshooting
+
+### Problem: Hours Not Validating
+
+**Possible causes:**
+- Invalid time format in hours string
+- Hour intervals overlap incorrectly
+- End time before start time
+
+**Solution:** Use format `HH:MM-HH:MM` and ensure logical time ordering
+
+### Problem: Reservations Outside Hours
+
+**Possible causes:**
+- Business hours not configured
+- Customer bypassing validation
+- Time zone mismatch
+
+**Solution:** Verify `HorarioApertura` exists and covers all days
+
+### Problem: Zone Changes Not Reflecting
+
+**Possible causes:**
+- Tables still assigned to old zone names
+- Configuration not saved
+
+**Solution:** Update table zones after changing business zone list
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Test Configuration" icon="flask">
+    Test changes before implementing:
+    - Verify hours with sample reservations
+    - Check cancellation policy with different scenarios
+    - Ensure zones match physical layout
+  </Card>
+  
+  <Card title="Communicate Changes" icon="bullhorn">
+    Notify customers of policy changes:
+    - Update website with new hours
+    - Announce cancellation policy changes
+    - Inform regular customers directly
+  </Card>
+  
+  <Card title="Seasonal Adjustments" icon="calendar">
+    Adjust configuration seasonally:
+    - Extend hours during busy seasons
+    - Add outdoor zones in summer
+    - Modify cancellation policy for holidays
+  </Card>
+  
+  <Card title="Monitor Impact" icon="chart-mixed">
+    Track how configuration affects bookings:
+    - Monitor reservation trends
+    - Track cancellation rates
+    - Adjust based on data
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Table Management" icon="table-columns" href="/owners/table-management">
+    Configure tables and assign them to zones
+  </Card>
+  <Card title="Reservation Management" icon="calendar-check" href="/owners/reservation-management">
+    Manage customer bookings with your configured rules
+  </Card>
+</CardGroup>

@@ -1,0 +1,415 @@
+---
+title: 'Business Owner Authentication'
+description: 'Learn how to authenticate as a business owner using email/password or Google Sign-In'
+icon: 'shield-halved'
+---
+
+## Overview
+
+The Restaurant Reservation System uses Firebase Authentication to secure business owner access. Two authentication methods are supported:
+
+<CardGroup cols={2}>
+  <Card title="Email/Password" icon="envelope">
+    Traditional email and password authentication
+  </Card>
+  <Card title="Google Sign-In" icon="google">
+    OAuth authentication using Google accounts
+  </Card>
+</CardGroup>
+
+## Authentication Service
+
+Authentication is handled by the `ServicioAutenticacion` class, which wraps Firebase Auth functionality.
+
+Implementation: `source/lib/adaptadores/servicio_autenticacion_firebase.dart`
+
+### Core Features
+
+- User registration and login
+- Password recovery
+- Email verification
+- Google OAuth integration
+- Phone number verification
+- Session management
+
+## Email/Password Authentication
+
+### Registering a New Account
+
+To register a new business owner account:
+
+```dart
+final auth = getIt<ServicioAutenticacion>();
+
+try {
+  final credential = await auth.registrarConEmail(
+    email: 'owner@restaurant.com',
+    password: 'securePassword123',
+  );
+  
+  // Verification email is sent automatically
+  print('Registration successful');
+} catch (e) {
+  print('Registration failed: $e');
+}
+```
+
+<Info>
+A verification email is automatically sent upon registration. Users should verify their email address for full account access.
+</Info>
+
+### Signing In
+
+Business owners authenticate using their registered credentials:
+
+```dart
+try {
+  final credential = await auth.iniciarSesionConEmail(
+    email: 'owner@restaurant.com',
+    password: 'securePassword123',
+  );
+  
+  // Authenticate business in database
+  final negocio = await negocioRepositorio.autenticarNegocio(
+    email: email,
+    password: password,
+  );
+  
+  if (negocio != null) {
+    // Access granted to admin panel
+  }
+} catch (e) {
+  print('Login failed: $e');
+}
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:36-53`
+
+### Password Requirements
+
+<Warning>
+Passwords must be at least **6 characters** long. This is enforced by Firebase Authentication.
+</Warning>
+
+## Google Sign-In Authentication
+
+### Platform-Specific Implementation
+
+Google Sign-In works differently on web vs mobile platforms:
+
+#### Web Platform
+
+On web, the system uses Firebase's built-in popup authentication:
+
+```dart
+if (kIsWeb) {
+  final googleProvider = GoogleAuthProvider();
+  googleProvider.addScope('email');
+  googleProvider.addScope('profile');
+  
+  // Force account selection
+  googleProvider.setCustomParameters({'prompt': 'select_account'});
+  
+  return await _auth.signInWithPopup(googleProvider);
+}
+```
+
+<Tip>
+The `prompt: select_account` parameter ensures users can choose which Google account to use, even if already logged in.
+</Tip>
+
+#### Mobile/Desktop Platform
+
+On mobile and desktop, the `google_sign_in` package handles the OAuth flow:
+
+```dart
+else {
+  final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+  
+  if (googleUser == null) {
+    return null; // User cancelled
+  }
+  
+  final GoogleSignInAuthentication googleAuth = 
+      await googleUser.authentication;
+  
+  final credential = GoogleAuthProvider.credential(
+    accessToken: googleAuth.accessToken,
+    idToken: googleAuth.idToken,
+  );
+  
+  return await _auth.signInWithCredential(credential);
+}
+```
+
+Implementation reference: `source/lib/adaptadores/servicio_autenticacion_firebase.dart:72-101`
+
+### Checking Authentication Provider
+
+To determine if a user signed in with Google:
+
+```dart
+bool get esLoginGoogle {
+  final user = _auth.currentUser;
+  if (user == null) return false;
+  return user.providerData.any((p) => p.providerId == 'google.com');
+}
+```
+
+<Info>
+Google-authenticated users cannot change their email or password through the system, as these are managed by Google.
+</Info>
+
+## Password Management
+
+### Changing Password
+
+Only users authenticated with email/password can change their password:
+
+```dart
+try {
+  await auth.cambiarPassword(
+    passwordActual: 'currentPassword',
+    passwordNueva: 'newSecurePassword',
+  );
+  print('Password updated successfully');
+} catch (e) {
+  print('Password change failed: $e');
+}
+```
+
+The process includes:
+
+<Steps>
+  <Step title="Reauthentication">
+    User must provide current password for security verification
+  </Step>
+  <Step title="Credential validation">
+    Firebase validates the current password against stored credentials
+  </Step>
+  <Step title="Password update">
+    New password is applied to the Firebase Auth account
+  </Step>
+</Steps>
+
+<Warning>
+Google Sign-In users see an informational message explaining they cannot change passwords through the system.
+</Warning>
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_screen.dart:1310-1428`
+
+### Password Recovery
+
+For forgotten passwords, users can request a reset email:
+
+```dart
+try {
+  await auth.enviarEmailRecuperacion(
+    email: 'owner@restaurant.com',
+  );
+  print('Recovery email sent');
+} catch (e) {
+  print('Recovery failed: $e');
+}
+```
+
+Implementation reference: `source/lib/adaptadores/servicio_autenticacion_firebase.dart:148-163`
+
+## Email Management
+
+### Changing Email Address
+
+Business owners can update their email address with proper security checks:
+
+```dart
+try {
+  await auth.cambiarEmail(
+    nuevoEmail: 'newemail@restaurant.com',
+    passwordActual: 'currentPassword',
+  );
+  print('Email updated, verification sent');
+} catch (e) {
+  print('Email change failed: $e');
+}
+```
+
+The email change process:
+
+<Steps>
+  <Step title="Password verification">
+    User must provide current password for security
+  </Step>
+  <Step title="Database validation">
+    Password is verified against the business database record
+  </Step>
+  <Step title="Firebase Auth update">
+    New email is set in Firebase Authentication
+  </Step>
+  <Step title="Verification email sent">
+    Firebase sends a verification email to the new address
+  </Step>
+  <Step title="Database update">
+    New email is saved to Firestore business document
+  </Step>
+</Steps>
+
+<Warning>
+**Email Already in Use Error**: If the new email is already registered to another Firebase account, the change will fail with an `email-already-in-use` error.
+</Warning>
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_screen.dart:1005-1232`
+
+### Email Verification
+
+Verification emails are sent automatically:
+
+```dart
+await auth.enviarEmailVerificacion(
+  urlRedireccion: 'https://yourapp.web.app',
+);
+```
+
+To check verification status:
+
+```dart
+final verified = await auth.recargarUsuario();
+if (verified) {
+  print('Email is verified');
+}
+```
+
+## Error Handling
+
+The authentication service provides user-friendly error messages:
+
+| Firebase Error Code | User-Friendly Message |
+|---------------------|----------------------|
+| `email-already-in-use` | "Este correo ya está registrado" |
+| `weak-password` | "La contraseña debe tener al menos 6 caracteres" |
+| `invalid-email` | "El correo electrónico no es válido" |
+| `user-not-found` | "No existe una cuenta con este correo" |
+| `wrong-password` | "Contraseña incorrecta" |
+| `requires-recent-login` | "Por seguridad, inicia sesión nuevamente" |
+| `too-many-requests` | "Demasiados intentos. Intenta más tarde" |
+| `user-disabled` | "Esta cuenta ha sido deshabilitada" |
+| `invalid-credential` | "Credenciales inválidas. Cierra sesión e intenta nuevamente" |
+
+Implementation reference: `source/lib/adaptadores/servicio_autenticacion_firebase.dart:473-498`
+
+## Session Management
+
+### Checking Authentication State
+
+Monitor authentication state changes:
+
+```dart
+auth.authStateChanges.listen((User? user) {
+  if (user != null) {
+    print('User is signed in: ${user.email}');
+  } else {
+    print('User is signed out');
+  }
+});
+```
+
+### Current User Information
+
+Access current user details:
+
+```dart
+final info = auth.obtenerInfoUsuario();
+
+if (info != null) {
+  print('UID: ${info['uid']}');
+  print('Email: ${info['email']}');
+  print('Name: ${info['nombre']}');
+  print('Email Verified: ${info['emailVerificado']}');
+  print('Google Login: ${info['esGoogle']}');
+}
+```
+
+### Signing Out
+
+To sign out a user:
+
+```dart
+await auth.cerrarSesion();
+// User is redirected to home screen
+```
+
+<Info>
+Signing out clears both Firebase Auth session and Google Sign-In session (if applicable).
+</Info>
+
+Implementation reference: `source/lib/adaptadores/servicio_autenticacion_firebase.dart:104-109`
+
+## Phone Verification
+
+Business owners can verify their phone number for additional security.
+
+### Sending Verification Code
+
+```dart
+await auth.enviarCodigoSMS(
+  numeroTelefono: '+54 9 261 123-4567',
+  onCodeSent: (message) => print(message),
+  onError: (error) => print(error),
+  onAutoVerified: () => print('Auto-verified on Android'),
+);
+```
+
+### Phone Number Format
+
+The system accepts Argentine phone numbers and automatically formats them to E.164:
+
+- Input: `11 1234-5678`
+- Formatted: `+5491112345678`
+
+<Tip>
+The system validates Argentine phone numbers and provides helpful error messages for invalid formats.
+</Tip>
+
+### Verifying SMS Code
+
+```dart
+try {
+  await auth.verificarCodigoSMS(codigo: '123456');
+  print('Phone verified successfully');
+} catch (e) {
+  print('Verification failed: $e');
+}
+```
+
+Implementation reference: `source/lib/adaptadores/servicio_autenticacion_firebase.dart:269-381`
+
+## Security Best Practices
+
+<Warning>
+**Never update git config** or run destructive Firebase operations without explicit user consent.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Strong Passwords" icon="lock">
+    Require passwords of at least 6 characters with mixed case and numbers
+  </Card>
+  <Card title="Email Verification" icon="envelope-circle-check">
+    Encourage users to verify their email addresses
+  </Card>
+  <Card title="Recent Authentication" icon="clock-rotate-left">
+    Sensitive operations require recent login for security
+  </Card>
+  <Card title="Phone Verification" icon="mobile">
+    Add phone verification as a second factor
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Admin Panel" icon="gauge-high" href="/owners/admin-panel">
+    Learn how to navigate the business owner dashboard
+  </Card>
+  <Card title="Business Configuration" icon="gear" href="/owners/business-configuration">
+    Configure your restaurant settings and policies
+  </Card>
+</CardGroup>

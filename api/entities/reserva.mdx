@@ -1,0 +1,225 @@
+---
+title: 'Reserva'
+description: 'Entity representing a restaurant table reservation'
+icon: 'calendar-check'
+---
+
+## Overview
+
+The `Reserva` class represents a restaurant table reservation in the system. It contains information about the table, date/time, number of guests, and reservation status.
+
+## EstadoReserva Enum
+
+Represents the possible states of a reservation:
+
+```dart
+enum EstadoReserva {
+  pendiente,
+  confirmada,
+  cancelada,
+}
+```
+
+<ResponseField name="pendiente" type="EstadoReserva">
+  Initial state when a reservation is created
+</ResponseField>
+
+<ResponseField name="confirmada" type="EstadoReserva">
+  State after the reservation has been confirmed
+</ResponseField>
+
+<ResponseField name="cancelada" type="EstadoReserva">
+  State when the reservation has been cancelled
+</ResponseField>
+
+## Class Definition
+
+```dart
+class Reserva {
+  final String id;
+  final String mesaId;
+  final DateTime fechaHora;
+  final int numeroPersonas;
+  final int duracionMinutos;
+  EstadoReserva estado;
+  final String? contactoCliente;
+  final String? nombreCliente;
+  final String? telefonoCliente;
+  final String? negocioId;
+}
+```
+
+## Properties
+
+<ParamField path="id" type="String" required>
+  Unique identifier for the reservation
+</ParamField>
+
+<ParamField path="mesaId" type="String" required>
+  Identifier of the table being reserved
+</ParamField>
+
+<ParamField path="fechaHora" type="DateTime" required>
+  Date and time when the reservation starts
+</ParamField>
+
+<ParamField path="numeroPersonas" type="int" required>
+  Number of people for the reservation
+</ParamField>
+
+<ParamField path="duracionMinutos" type="int" default="60">
+  Duration of the reservation in minutes
+</ParamField>
+
+<ParamField path="estado" type="EstadoReserva" default="EstadoReserva.pendiente">
+  Current status of the reservation (pendiente, confirmada, or cancelada)
+</ParamField>
+
+<ParamField path="contactoCliente" type="String?">
+  Customer's email for notifications (optional)
+</ParamField>
+
+<ParamField path="nombreCliente" type="String?">
+  Customer's name (optional)
+</ParamField>
+
+<ParamField path="telefonoCliente" type="String?">
+  Customer's verified phone number (optional)
+</ParamField>
+
+<ParamField path="negocioId" type="String?">
+  Identifier of the restaurant where the reservation was made (optional)
+</ParamField>
+
+## Constructor
+
+```dart
+Reserva({
+  required this.id,
+  required this.mesaId,
+  required this.fechaHora,
+  required this.numeroPersonas,
+  this.duracionMinutos = 60,
+  this.estado = EstadoReserva.pendiente,
+  this.contactoCliente,
+  this.nombreCliente,
+  this.telefonoCliente,
+  this.negocioId,
+})
+```
+
+## Methods
+
+### horaFin
+
+Computed property that calculates the end time of the reservation.
+
+```dart
+DateTime get horaFin => fechaHora.add(Duration(minutes: duracionMinutos));
+```
+
+**Returns:** `DateTime` - The calculated end time of the reservation
+
+### confirmar()
+
+Confirms a pending reservation. Updates the reservation status to `confirmada`.
+
+```dart
+void confirmar()
+```
+
+**Throws:**
+- `Exception` - If attempting to confirm a cancelled reservation
+- `Exception` - If the reservation is already confirmed
+
+**Example:**
+```dart
+final reserva = Reserva(
+  id: '1',
+  mesaId: 'mesa-01',
+  fechaHora: DateTime(2026, 3, 15, 20, 0),
+  numeroPersonas: 4,
+);
+
+reserva.confirmar(); // Changes estado to EstadoReserva.confirmada
+```
+
+### copyWith()
+
+Creates a copy of the reservation with specified fields updated.
+
+```dart
+Reserva copyWith({
+  String? id,
+  String? mesaId,
+  DateTime? fechaHora,
+  int? numeroPersonas,
+  int? duracionMinutos,
+  EstadoReserva? estado,
+  String? contactoCliente,
+  String? nombreCliente,
+  String? telefonoCliente,
+  String? negocioId,
+})
+```
+
+**Returns:** `Reserva` - A new instance with updated fields
+
+**Example:**
+```dart
+final reservaOriginal = Reserva(
+  id: '1',
+  mesaId: 'mesa-01',
+  fechaHora: DateTime(2026, 3, 15, 20, 0),
+  numeroPersonas: 4,
+);
+
+final reservaModificada = reservaOriginal.copyWith(
+  numeroPersonas: 6,
+  duracionMinutos: 90,
+);
+```
+
+## Usage Examples
+
+### Creating a New Reservation
+
+```dart
+final reserva = Reserva(
+  id: 'res-123',
+  mesaId: 'mesa-05',
+  fechaHora: DateTime(2026, 3, 20, 19, 30),
+  numeroPersonas: 2,
+  duracionMinutos: 90,
+  contactoCliente: '[email protected]',
+  nombreCliente: 'Juan Pérez',
+  telefonoCliente: '+34612345678',
+  negocioId: 'rest-001',
+);
+```
+
+### Confirming a Reservation
+
+```dart
+try {
+  reserva.confirmar();
+  print('Reserva confirmada exitosamente');
+} catch (e) {
+  print('Error al confirmar: $e');
+}
+```
+
+### Calculating End Time
+
+```dart
+final reserva = Reserva(
+  id: '1',
+  mesaId: 'mesa-01',
+  fechaHora: DateTime(2026, 3, 15, 20, 0),
+  numeroPersonas: 4,
+  duracionMinutos: 120,
+);
+
+print('Hora de inicio: ${reserva.fechaHora}');
+print('Hora de fin: ${reserva.horaFin}'); // 22:00
+```

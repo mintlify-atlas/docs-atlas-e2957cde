@@ -1,80 +1,460 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get from zero to your first working reservation in under 10 minutes
 ---
 
-## Get started in three steps
+## Welcome!
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through setting up the Restaurant Reservation System and creating your first test reservation. By the end, you'll have a fully functional reservation system running on your device.
 
-### Step 1: Set up your local environment
+<Steps>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+### Prerequisites
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
+Before starting, ensure you have:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Flutter SDK" icon="mobile">
+    Version 3.7.2 or higher
+  </Card>
+  <Card title="Firebase Account" icon="fire">
+    Free Google account for Firebase
+  </Card>
+  <Card title="Git" icon="code-branch">
+    For cloning the repository
+  </Card>
+  <Card title="IDE" icon="code">
+    VS Code or Android Studio
+  </Card>
 </CardGroup>
 
+**Verify Flutter installation:**
+
+```bash
+flutter --version
+```
+
+You should see Flutter 3.7.2 or higher. If not, follow the [Flutter installation guide](https://docs.flutter.dev/get-started/install).
+
+### Clone the Repository
+
+Clone the source code to your local machine:
+
+```bash
+git clone <repository-url>
+cd app_restaurante
+```
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Replace `<repository-url>` with your actual repository URL.
 </Note>
+
+### Install Dependencies
+
+Install all Flutter packages defined in `pubspec.yaml`:
+
+```bash
+flutter pub get
+```
+
+This will install essential packages:
+
+- `firebase_core: ^3.3.0` - Firebase SDK
+- `cloud_firestore: ^5.6.12` - Database
+- `firebase_auth: ^5.1.0` - Authentication
+- `flutter_bloc: ^8.1.3` - State management
+- `get_it: ^7.6.4` - Dependency injection
+- `go_router: ^13.0.0` - Navigation
+
+### Set Up Firebase Project
+
+Create and configure your Firebase project:
+
+<Tabs>
+  <Tab title="Firebase Console">
+    1. Go to [Firebase Console](https://console.firebase.google.com/)
+    2. Click **Add project**
+    3. Enter project name (e.g., "my-restaurant-app")
+    4. Disable Google Analytics (optional for testing)
+    5. Click **Create project**
+  </Tab>
+  
+  <Tab title="Enable Firestore">
+    1. In Firebase Console, go to **Build** → **Firestore Database**
+    2. Click **Create database**
+    3. Select **Start in test mode** (for development)
+    4. Choose a location closest to you
+    5. Click **Enable**
+  </Tab>
+  
+  <Tab title="Enable Authentication">
+    1. Go to **Build** → **Authentication**
+    2. Click **Get started**
+    3. Enable **Email/Password** provider
+    4. Enable **Google** provider
+    5. Add support email
+  </Tab>
+</Tabs>
+
+<Warning>
+  Test mode security rules allow anyone to read/write your database. Update rules before production deployment.
+</Warning>
+
+### Configure Firebase for Flutter
+
+Install Firebase CLI and configure your app:
+
+```bash
+# Install Firebase CLI
+npm install -g firebase-tools
+
+# Login to Firebase
+firebase login
+
+# Install FlutterFire CLI
+dart pub global activate flutterfire_cli
+
+# Configure Firebase for your Flutter app
+flutterfire configure
+```
+
+**During configuration:**
+
+1. Select your Firebase project
+2. Choose platforms (iOS, Android, Web, etc.)
+3. Accept the generated configuration
+
+This creates `lib/firebase_options.dart` with your project configuration.
+
+### Add Firebase Configuration Files
+
+The project needs a `.firebaserc` file in the root directory:
+
+```json .firebaserc
+{
+  "projects": {
+    "default": "your-project-id"
+  }
+}
+```
+
+<Note>
+  Replace `your-project-id` with your actual Firebase project ID from the Firebase Console.
+</Note>
+
+### Initialize Firestore Data
+
+The app requires initial business data. You can either:
+
+**Option A: Use Firebase Console UI**
+
+1. Go to Firestore Database in Firebase Console
+2. Start collection: `negocios`
+3. Add a document with auto-generated ID
+4. Add fields:
+   - `nombre`: "Mi Restaurante" (string)
+   - `email`: "owner@restaurant.com" (string)
+   - `telefono`: "+123456789" (string)
+   - `direccion`: "123 Main St" (string)
+   - `maxDiasAnticipacionReserva`: 14 (number)
+   - `duracionPromedioMinutos`: 60 (number)
+
+**Option B: Use Firestore Rules to Allow Initialization**
+
+Update `firestore.rules`:
+
+```javascript firestore.rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read/write for development
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+Deploy rules:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+### Run the Application
+
+Now you're ready to run the app!
+
+<CodeGroup>
+
+```bash Terminal
+# Start an emulator or connect a device
+flutter devices
+
+# Run the app in debug mode
+flutter run
+```
+
+```bash Build for specific platform
+# Android
+flutter run -d android
+
+# iOS (macOS only)
+flutter run -d ios
+
+# Web
+flutter run -d chrome
+```
+
+```bash Release build
+# Create APK (Android)
+flutter build apk
+
+# Create iOS build
+flutter build ios
+```
+
+</CodeGroup>
+
+The app will compile and launch on your device. You should see the main screen with navigation options.
+
+### Create Your First Business
+
+Set up your restaurant profile:
+
+1. **Open the app** and navigate to the owner section
+2. **Sign in with Google** (for owners)
+3. **Create business profile**:
+   - Name: "Test Restaurant"
+   - Email: your-email@example.com
+   - Phone: +1234567890
+   - Address: "123 Test Street"
+4. **Configure settings**:
+   - Max advance booking: 14 days
+   - Average duration: 60 minutes
+5. **Save** your business profile
+
+### Add Tables
+
+Create tables for your restaurant:
+
+1. Go to **Table Management**
+2. Click **Add Table**
+3. Enter table details:
+   - **Name**: "Mesa 1" (Table 1)
+   - **Capacity**: 2 persons
+   - **Status**: Available
+4. Repeat for more tables:
+   - Mesa 2 (4 persons)
+   - Mesa 3 (6 persons)
+5. Click **Save**
+
+<Note>
+  Tables use smart capacity matching. A table can accommodate +3 persons above party size (e.g., a 6-person table can host 3-6 guests).
+</Note>
+
+### Set Operating Hours
+
+Define when your restaurant is open:
+
+1. Navigate to **Operating Hours**
+2. For each day of the week:
+   - Toggle **Open/Closed**
+   - Set **Opening time**: 11:00 AM
+   - Set **Closing time**: 10:00 PM
+3. **Save** the schedule
+
+### Make a Test Reservation
+
+Time to create your first reservation!
+
+1. **Navigate to Availability** (customer view)
+2. **Select date**: Choose tomorrow's date
+3. **Select time**: 2:00 PM (14:00)
+4. **Number of guests**: 2 persons
+5. Click **Search Available Tables**
+
+<Check>
+  You should see available tables matching your criteria!
+</Check>
+
+6. **Select a table**: Choose "Mesa 1"
+7. **Enter customer details**:
+   - Name: "Juan Pérez"
+   - Email: "test@example.com"
+   - Phone: "+1234567890" (optional)
+8. Click **Create Reservation**
+
+### Verify the Reservation
+
+The system will send a verification code:
+
+<Tabs>
+  <Tab title="Email Verification">
+    1. Check the console output for verification code
+    2. In production, this would be sent via email
+    3. Enter the 6-digit code in the app
+    4. Click **Verify**
+  </Tab>
+  
+  <Tab title="Confirmation">
+    Once verified, you'll see:
+    - ✅ **Reservation Confirmed**
+    - Reservation ID
+    - Table name
+    - Date and time
+    - Party size
+  </Tab>
+</Tabs>
+
+### View Your Reservations
+
+Check the reservation dashboard:
+
+1. Go to **My Reservations** (customer view)
+2. See your confirmed booking:
+   - Date: Tomorrow
+   - Time: 14:00 - 15:00
+   - Table: Mesa 1
+   - Status: Confirmed
+
+**As a business owner:**
+
+1. Go to **Owner Dashboard**
+2. View all reservations
+3. See customer details
+4. Option to cancel if needed
+
+### Test Conflict Detection
+
+Verify the system prevents double-booking:
+
+1. Try to make **another reservation** for:
+   - Same table: Mesa 1
+   - Same date: Tomorrow
+   - Same time: 14:00
+2. Click **Search Available Tables**
+
+<Warning>
+  Mesa 1 should **NOT** appear in available tables. The system detects the conflict!
+</Warning>
+
+3. Try a different time slot: 15:00 (3:00 PM)
+4. Mesa 1 should now be available ✅
+
+</Steps>
+
+## Understanding Time Slots
+
+The system uses **1-hour fixed intervals**:
+
+```dart
+// Reservation structure
+Reservation {
+  fechaHora: DateTime(2026, 03, 10, 14, 0),  // 2:00 PM
+  duracionMinutos: 60,                       // 1 hour duration
+  horaFin: DateTime(2026, 03, 10, 15, 0),   // Calculated: 3:00 PM
+}
+
+// Conflict detection logic
+Reserva 1: [14:00 - 15:00)
+Reserva 2: [14:30 - 15:30)  → CONFLICT ❌
+Reserva 2: [15:00 - 16:00)  → NO CONFLICT ✅
+```
+
+<Info>
+  The overlap algorithm uses half-open intervals [start, end). Two reservations conflict if `startB < endA AND endB > startA`.
+</Info>
+
+## What You've Accomplished
+
+<AccordionGroup>
+  <Accordion title="✅ Application Setup">
+    - Installed Flutter and dependencies
+    - Configured Firebase project
+    - Connected app to Firestore database
+  </Accordion>
+  
+  <Accordion title="✅ Business Configuration">
+    - Created restaurant profile
+    - Added tables with capacities
+    - Set operating hours
+  </Accordion>
+  
+  <Accordion title="✅ Reservation System">
+    - Made your first reservation
+    - Verified email confirmation flow
+    - Tested conflict detection
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Customize Settings" icon="gear">
+    Adjust reservation duration, advance booking limits, and email templates
+  </Card>
+  
+  <Card title="Deploy to Production" icon="rocket">
+    Set up proper Firestore security rules and deploy to app stores
+  </Card>
+  
+  <Card title="Add Features" icon="star">
+    Implement recurring reservations, waitlists, and advanced analytics
+  </Card>
+  
+  <Card title="Integration Guide" icon="plug">
+    Connect with payment systems, SMS notifications, and third-party APIs
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Firebase not initialized error">
+    **Problem**: App crashes with "Firebase not initialized"
+    
+    **Solution**: Run `flutterfire configure` again and ensure `firebase_options.dart` exists in `lib/`.
+  </Accordion>
+  
+  <Accordion title="No tables available">
+    **Problem**: Search returns no available tables
+    
+    **Solution**: 
+    - Verify tables are created in Firestore (`mesas` collection)
+    - Check table capacity matches or exceeds party size
+    - Ensure operating hours include selected time
+    - Confirm no conflicting reservations exist
+  </Accordion>
+  
+  <Accordion title="Verification code not working">
+    **Problem**: Email verification fails
+    
+    **Solution**: In development, verification codes are printed to console. Check Flutter logs for the 6-digit code.
+  </Accordion>
+  
+  <Accordion title="Build errors after pub get">
+    **Problem**: Compilation errors after installing dependencies
+    
+    **Solution**:
+    ```bash
+    flutter clean
+    flutter pub get
+    flutter pub upgrade
+    flutter run
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Need Help?
+
+If you encounter issues:
+
+1. Check the [Installation Guide](/installation) for detailed setup instructions
+2. Review Firebase Console for configuration errors
+3. Verify all dependencies are correctly installed
+4. Check Flutter and Firebase versions compatibility
+
+<Info>
+  For detailed architecture information and code examples, see the [Introduction](/introduction) page.
+</Info>

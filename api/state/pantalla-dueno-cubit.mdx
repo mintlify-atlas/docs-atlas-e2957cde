@@ -1,0 +1,634 @@
+---
+title: PantallaDuenoCubit
+description: State management for restaurant owner dashboard and business administration
+---
+
+## Overview
+
+`PantallaDuenoCubit` manages the complete restaurant owner experience including authentication, business profile management, table configuration, reservation oversight, and analytics. This is the central state manager for all owner-facing features.
+
+**Location:** `lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:14`
+
+## Purpose
+
+This Cubit coordinates:
+- Owner authentication and session management
+- Business profile updates (name, phone, email, hours, etc.)
+- Table (Mesa) CRUD operations
+- Reservation viewing and cancellation (admin)
+- Zone management
+- Business rules configuration
+- Restaurant history/story content
+- Metrics and analytics
+
+## State Classes
+
+The Cubit uses states defined in `pantalla_dueno_estados_de_cubit.dart`:
+
+### PantallaDuenoInicial
+
+Initial state before authentication.
+
+```dart
+class PantallaDuenoInicial extends PantallaDuenoState {
+  const PantallaDuenoInicial();
+}
+```
+
+### PantallaDuenoCargando
+
+Emitted during authentication or data loading.
+
+```dart
+class PantallaDuenoCargando extends PantallaDuenoState {
+  const PantallaDuenoCargando();
+}
+```
+
+### PantallaDuenoAutenticado
+
+Emitted when owner is authenticated successfully.
+
+```dart
+class PantallaDuenoAutenticado extends PantallaDuenoState {
+  final Negocio negocio;
+  
+  const PantallaDuenoAutenticado(this.negocio);
+}
+```
+
+**Properties:**
+- `negocio`: Complete business entity with all configuration
+
+**This is the primary working state** where all dashboard features are available.
+
+### PantallaDuenoConError
+
+Emitted on authentication failure or operation errors.
+
+```dart
+class PantallaDuenoConError extends PantallaDuenoState {
+  final String mensaje;
+  
+  const PantallaDuenoConError(this.mensaje);
+}
+```
+
+## Constructor
+
+```dart
+PantallaDuenoCubit(
+  this.negocioRepositorio,
+  this.mesaRepositorio,
+  this.reservaRepositorio,
+  this.cancelarReservaUseCase,
+  this.horarioAperturaRepositorio,
+  this.historiaRepositorio,
+) : super(const PantallaDuenoInicial());
+```
+
+**Dependencies:**
+- `negocioRepositorio`: Business data operations
+- `mesaRepositorio`: Table management
+- `reservaRepositorio`: Reservation queries
+- `cancelarReservaUseCase`: Admin cancellation logic
+- `horarioAperturaRepositorio`: Operating hours
+- `historiaRepositorio`: Restaurant story content
+
+All dependencies are injected, typically via router configuration.
+
+## Authentication Methods
+
+### autenticar
+
+Authenticates owner with email and password.
+
+```dart
+Future<void> autenticar(String email, String password) async
+```
+
+**Parameters:**
+- `email`: Owner's email
+- `password`: Owner's password
+
+**State Transitions:**
+1. `PantallaDuenoCargando` → Authenticating
+2. `PantallaDuenoAutenticado` → Success with business data
+3. `PantallaDuenoConError` → Invalid credentials or error
+
+**Source:** `pantalla_dueno_cubit.dart:36`
+
+### establecerNegocioAutenticado
+
+Directly sets authenticated business (used after external auth).
+
+```dart
+void establecerNegocioAutenticado(Negocio negocio)
+```
+
+**Usage:** Called after Firebase Auth success to update state.
+
+**Source:** `pantalla_dueno_cubit.dart:32`
+
+### cerrarSesion
+
+Logs out the owner and returns to initial state.
+
+```dart
+void cerrarSesion()
+```
+
+**Source:** `pantalla_dueno_cubit.dart:55`
+
+## Business Profile Methods
+
+### actualizarTelefono
+
+Updates restaurant phone number.
+
+```dart
+Future<bool> actualizarTelefono(Negocio negocio, String nuevoTelefono) async
+```
+
+**Parameters:**
+- `negocio`: Current business entity
+- `nuevoTelefono`: New phone number
+
+**Returns:** `true` if update successful
+
+**Side Effects:**
+- Resets `telefonoVerificado` to `false` when phone changes
+- Updates state with new business entity on success
+
+**Source:** `pantalla_dueno_cubit.dart:59`
+
+### actualizarNombre
+
+Updates restaurant name.
+
+```dart
+Future<bool> actualizarNombre(Negocio negocio, String nuevoNombre) async
+```
+
+**Source:** `pantalla_dueno_cubit.dart:118`
+
+### actualizarIcono
+
+Updates restaurant icon/logo.
+
+```dart
+Future<bool> actualizarIcono(Negocio negocio, String nuevoIcono) async
+```
+
+**Parameters:**
+- `nuevoIcono`: Icon name (e.g., "local_pizza", "sailing", "restaurant")
+
+**Source:** `pantalla_dueno_cubit.dart:141`
+
+### actualizarEspecialidad
+
+Updates restaurant specialty.
+
+```dart
+Future<bool> actualizarEspecialidad(Negocio negocio, String nuevaEspecialidad) async
+```
+
+**Source:** `pantalla_dueno_cubit.dart:81`
+
+### actualizarDescripcion
+
+Updates restaurant description.
+
+```dart
+Future<bool> actualizarDescripcion(Negocio negocio, String nuevaDescripcion) async
+```
+
+**Source:** `pantalla_dueno_cubit.dart:164`
+
+### actualizarZonas
+
+Updates the list of zones in the restaurant.
+
+```dart
+Future<bool> actualizarZonas(Negocio negocio, List<String> zonas) async
+```
+
+**Parameters:**
+- `zonas`: List of zone names (e.g., ["Terraza", "Salón", "Jardín"])
+
+**Source:** `pantalla_dueno_cubit.dart:104`
+
+### actualizarConfiguracionReglas
+
+Updates business rules configuration.
+
+```dart
+Future<bool> actualizarConfiguracionReglas(
+  Negocio negocio, {
+  required int duracionPromedioMinutos,
+  required int minHorasParaCancelar,
+  required int maxDiasAnticipacionReserva,
+}) async
+```
+
+**Parameters:**
+- `duracionPromedioMinutos`: Reservation duration (e.g., 60, 90, 120)
+- `minHorasParaCancelar`: Minimum hours before reservation to allow cancellation
+- `maxDiasAnticipacionReserva`: Maximum days in advance to make reservation
+
+**Source:** `pantalla_dueno_cubit.dart:229`
+
+## Operating Hours Methods
+
+### obtenerHorarios
+
+Retrieves operating hours for the business.
+
+```dart
+Future<Map<String, String>> obtenerHorarios(String negocioId) async
+```
+
+**Returns:** Map of day names to hour ranges (e.g., `{"Lunes": "12:00 - 23:00"}`)
+
+**Source:** `pantalla_dueno_cubit.dart:187`
+
+### actualizarHorarios
+
+Updates operating hours.
+
+```dart
+Future<bool> actualizarHorarios(
+  String negocioId,
+  Map<String, String> horarios,
+) async
+```
+
+**Parameters:**
+- `horarios`: Map of day names to hour ranges or "Cerrado"
+
+**Source:** `pantalla_dueno_cubit.dart:193`
+
+## Table (Mesa) Management Methods
+
+### obtenerMesasDelNegocio
+
+Retrieves all tables for the restaurant.
+
+```dart
+Future<List<Mesa>> obtenerMesasDelNegocio(String negocioId) async
+```
+
+**Source:** `pantalla_dueno_cubit.dart:258`
+
+### agregarMesa
+
+Creates a new table.
+
+```dart
+Future<Mesa?> agregarMesa(
+  String negocioId,
+  String nombre,
+  int capacidad,
+  String zona,
+) async
+```
+
+**Parameters:**
+- `nombre`: Table name (e.g., "Mesa 1", "Terraza A")
+- `capacidad`: Maximum number of guests
+- `zona`: Zone where table is located
+
+**Returns:** Created table entity or `null` on error
+
+**Source:** `pantalla_dueno_cubit.dart:262`
+
+### actualizarMesa
+
+Updates an existing table.
+
+```dart
+Future<bool> actualizarMesa(Mesa mesa) async
+```
+
+**Source:** `pantalla_dueno_cubit.dart:283`
+
+### eliminarMesa
+
+Deletes a table.
+
+```dart
+Future<bool> eliminarMesa(String mesaId) async
+```
+
+**Source:** `pantalla_dueno_cubit.dart:292`
+
+## Reservation Management Methods
+
+### obtenerReservasDelNegocio
+
+Retrieves all reservations for the restaurant.
+
+```dart
+Future<List<Reserva>> obtenerReservasDelNegocio(String negocioId) async
+```
+
+**Implementation:** Filters all reservations by matching table IDs from the business.
+
+**Source:** `pantalla_dueno_cubit.dart:302`
+
+### cancelarReservaAdmin
+
+Cancels a reservation as administrator.
+
+```dart
+Future<bool> cancelarReservaAdmin(String reservaId, {String? motivo}) async
+```
+
+**Parameters:**
+- `reservaId`: ID of reservation to cancel
+- `motivo`: Optional cancellation reason
+
+**Returns:** `true` if cancellation successful
+
+**Important:** This delegates to `CancelarReserva.ejecutarComoAdmin()` which:
+- Marks cancellation as admin-initiated
+- Sends notification email to customer
+- Records cancellation reason in history
+- Bypasses customer cancellation window checks
+
+**Source:** `pantalla_dueno_cubit.dart:320`
+
+## Restaurant History Methods
+
+### obtenerHistoria
+
+Retrieves restaurant history/story content.
+
+```dart
+Future<HistoriaRestaurante?> obtenerHistoria(String negocioId) async
+```
+
+**Source:** `pantalla_dueno_cubit.dart:207`
+
+### guardarHistoria
+
+Saves restaurant history content.
+
+```dart
+Future<bool> guardarHistoria(
+  String negocioId,
+  HistoriaRestaurante historia,
+) async
+```
+
+**Source:** `pantalla_dueno_cubit.dart:216`
+
+## Metrics and Analytics Methods
+
+### obtenerMetricasReservas
+
+Calculates comprehensive reservation metrics.
+
+```dart
+Future<Map<String, dynamic>> obtenerMetricasReservas(String negocioId) async
+```
+
+**Returns:** Map containing:
+- `reservasPorDia`: Map of last 7 days to reservation count
+- `reservasPorMes`: Map of last 6 months to reservation count
+- `horariosPico`: Top 3 busiest hours with counts
+- `horariosPocoMovimiento`: Top 3 slowest hours with counts
+- `totalReservas`: Total active reservations
+- `reservasHoy`: Reservations for today
+- `reservasMesActual`: Reservations for current month
+
+**Implementation Details:**
+- Excludes canceled reservations from metrics
+- Groups by day, month, and hour
+- Provides actionable insights for capacity planning
+
+**Source:** `pantalla_dueno_cubit.dart:342`
+
+## State Transition Diagram
+
+```
+PantallaDuenoInicial
+    ↓ autenticar(email, password)
+PantallaDuenoCargando
+    ↓ success
+PantallaDuenoAutenticado (with Negocio)
+    ↓ actualizarTelefono(), actualizarNombre(), etc.
+PantallaDuenoAutenticado (with updated Negocio)
+    ↓ cerrarSesion()
+PantallaDuenoInicial
+
+(Authentication failure transitions to PantallaDuenoConError)
+(Update methods emit PantallaDuenoConError on failure but don't change state)
+```
+
+## Usage Example
+
+From `pantalla_dueno_screen.dart:34`:
+
+```dart
+// 1. Listen to authentication state
+BlocConsumer<PantallaDuenoCubit, PantallaDuenoState>(
+  listener: (context, state) {
+    if (state is PantallaDuenoConError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(state.mensaje), backgroundColor: Colors.red),
+      );
+    }
+  },
+  builder: (context, state) {
+    if (state is PantallaDuenoAutenticado) {
+      return _buildPanelDueno(context, state.negocio);
+    }
+    
+    return _buildLoginScreen();
+  },
+)
+
+// 2. Authenticate owner
+context.read<PantallaDuenoCubit>().autenticar(
+  'dueno@restaurante.com',
+  'password123',
+);
+
+// 3. Update business profile
+final success = await context.read<PantallaDuenoCubit>().actualizarNombre(
+  negocio,
+  'Nuevo Nombre del Restaurante',
+);
+
+// 4. Manage tables
+final nuevaMesa = await context.read<PantallaDuenoCubit>().agregarMesa(
+  negocio.id,
+  'Mesa 10',
+  4, // capacidad
+  'Terraza',
+);
+
+// 5. View reservations
+final reservas = await context
+    .read<PantallaDuenoCubit>()
+    .obtenerReservasDelNegocio(negocio.id);
+
+// 6. Cancel reservation as admin
+await context.read<PantallaDuenoCubit>().cancelarReservaAdmin(
+  reservaId,
+  motivo: 'Mesa no disponible por mantenimiento',
+);
+
+// 7. Get analytics
+final metricas = await context
+    .read<PantallaDuenoCubit>()
+    .obtenerMetricasReservas(negocio.id);
+
+print('Total reservas: ${metricas['totalReservas']}');
+print('Horarios pico: ${metricas['horariosPico']}');
+```
+
+## Dashboard Screen Integration
+
+From `pantalla_dueno_screen.dart:218`:
+
+```dart
+// Quick action tiles
+SizedBox(
+  height: 180,
+  child: ListView(
+    scrollDirection: Axis.horizontal,
+    children: [
+      TarjetaAccionGradiente(
+        icon: Icons.event_note,
+        title: 'Reservas',
+        subtitle: 'Gestionar',
+        onTap: () => _mostrarReservas(context, negocio),
+      ),
+      TarjetaAccionGradiente(
+        icon: Icons.table_bar,
+        title: 'Mesas',
+        subtitle: 'Configurar',
+        onTap: () => _mostrarGestionMesas(context, negocio),
+      ),
+      TarjetaAccionGradiente(
+        icon: Icons.bar_chart,
+        title: 'Métricas',
+        subtitle: 'Análisis',
+        onTap: () => _mostrarMetricas(context, negocio),
+      ),
+    ],
+  ),
+)
+```
+
+## Profile Update Example
+
+From `pantalla_dueno_screen.dart:743`:
+
+```dart
+void _mostrarEditarNombre(BuildContext context, negocio) {
+  final controller = TextEditingController(text: negocio.nombre);
+  
+  showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Editar Nombre'),
+      content: TextField(
+        controller: controller,
+        decoration: const InputDecoration(
+          labelText: 'Nombre del restaurante',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            final cubit = context.read<PantallaDuenoCubit>();
+            final exito = await cubit.actualizarNombre(
+              negocio,
+              controller.text.trim(),
+            );
+            Navigator.pop(dialogContext);
+            if (exito) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('✅ Nombre actualizado')),
+              );
+            }
+          },
+          child: const Text('Guardar'),
+        ),
+      ],
+    ),
+  );
+}
+```
+
+## Integration Points
+
+### With Repositories
+- `NegocioRepositorio`: Business CRUD and authentication
+- `MesaRepositorio`: Table management
+- `ReservaRepositorio`: Reservation queries
+- `HorarioAperturaRepositorio`: Operating hours management
+- `HistoriaRepositorio`: Restaurant story content
+
+### With Use Cases
+- `CancelarReserva`: Admin-initiated cancellations with notifications
+
+### With UI Components
+- `PantallaDuenoScreen`: Main owner dashboard
+- Profile update dialogs for each business field
+- Table management screens
+- Reservation list with admin actions
+- Metrics dashboard with charts
+
+## Security Considerations
+
+1. **Authentication Required**: All operations require authenticated state
+2. **Session Management**: State cleared on logout
+3. **Admin Actions**: Cancellations marked as admin-initiated
+4. **Audit Trail**: All changes logged in history
+5. **Email Verification**: Business rules for phone verification
+
+## Error Handling Pattern
+
+```dart
+try {
+  final exito = await negocioRepositorio.actualizarNegocio(negocioActualizado);
+  if (exito) {
+    emit(PantallaDuenoAutenticado(negocioActualizado));
+  }
+  return exito;
+} catch (e) {
+  emit(PantallaDuenoConError('Error al actualizar: $e'));
+  return false;
+}
+```
+
+**Key Points:**
+- Update methods return `bool` for success/failure
+- Errors emitted as states for snackbar display
+- State remains authenticated even on update failures
+- Caller can check return value for UI feedback
+
+## State Management Patterns
+
+1. **Authenticated Context**: Most operations require `PantallaDuenoAutenticado` state
+2. **Optimistic Updates**: State updated immediately on success
+3. **Error Recovery**: Failed updates don't log out user
+4. **Direct Repository Access**: Methods often return data directly without emitting states
+5. **Hybrid Pattern**: State for auth, direct returns for queries
+
+## Related Documentation
+
+- [DisponibilidadCubit](/api/state/disponibilidad-cubit) - Customer reservation flow
+- [MisReservasCubit](/api/state/mis-reservas-cubit) - Customer reservation management
+- [Negocio Entity](/api/domain/negocio) - Business entity
+- [Mesa Entity](/api/domain/mesa) - Table entity
+- [Reserva Entity](/api/domain/reserva) - Reservation entity
+- [CancelarReserva Use Case](/api/use-cases/cancelar-reserva) - Cancellation logic

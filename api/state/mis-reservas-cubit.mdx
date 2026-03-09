@@ -1,0 +1,388 @@
+---
+title: MisReservasCubit
+description: State management for viewing and canceling customer reservations
+---
+
+## Overview
+
+`MisReservasCubit` manages the state for customers to view their reservations filtered by verified phone number and cancel reservations. It ensures customers only see reservations associated with their verified phone number.
+
+**Location:** `lib/presentacion/mis_reservas/mis_reservas_cubit.dart:8`
+
+## Purpose
+
+This Cubit handles:
+- Loading reservations filtered by phone number and restaurant
+- Canceling reservations
+- Automatic reloading after operations
+- Maintaining verification context (phone number)
+
+## State Classes
+
+The Cubit uses states defined in `mis_reservas_estados_de_cubit.dart`:
+
+### MisReservasInicial
+
+Initial state before verification and loading.
+
+```dart
+class MisReservasInicial extends MisReservasState {}
+```
+
+### MisReservasCargando
+
+Emitted when loading or processing reservations.
+
+```dart
+class MisReservasCargando extends MisReservasState {}
+```
+
+### MisReservasExitoso
+
+Emitted when reservations are successfully loaded.
+
+```dart
+class MisReservasExitoso extends MisReservasState {
+  final List<Reserva> reservas;
+}
+```
+
+**Properties:**
+- `reservas`: List of customer's reservations
+
+### MisReservasConError
+
+Emitted when loading fails.
+
+```dart
+class MisReservasConError extends MisReservasState {
+  final String mensaje;
+}
+```
+
+### ReservaCancelada
+
+Emitted when a reservation is successfully canceled.
+
+```dart
+class ReservaCancelada extends MisReservasState {
+  final String mensaje;
+}
+```
+
+**Note:** After this state, the Cubit automatically reloads reservations to show updated list.
+
+### ReservaCancelacionError
+
+Emitted when cancellation fails.
+
+```dart
+class ReservaCancelacionError extends MisReservasState {
+  final String mensaje;
+}
+```
+
+**Note:** The Cubit attempts to reload reservations even after error to ensure UI consistency.
+
+## Constructor
+
+```dart
+MisReservasCubit()
+    : _cancelarReserva = getIt<CancelarReserva>(),
+      _reservaRepositorio = getIt<ReservaRepositorio>(),
+      super(MisReservasInicial());
+```
+
+Dependencies injected via service locator. Initial state is `MisReservasInicial`.
+
+## Key Methods
+
+### cargarReservasFiltradas
+
+Loads reservations for a verified phone number at a specific restaurant.
+
+```dart
+Future<void> cargarReservasFiltradas({
+  required String telefono,
+  required String negocioId,
+}) async
+```
+
+**Parameters:**
+- `telefono`: Verified phone number (format: "+54 9 261 123-4567")
+- `negocioId`: Restaurant ID to filter by
+
+**State Transitions:**
+1. `MisReservasCargando` → Loading reservations
+2. `MisReservasExitoso` → Success with reservation list (may be empty)
+3. `MisReservasConError` → If loading fails
+
+**Source:** `mis_reservas_cubit.dart:26`
+
+**Implementation Details:**
+- Stores phone and business ID for future reloads
+- Uses `obtenerReservasPorTelefonoYNegocio` for filtered query
+- Filters on server side for better performance
+
+### recargarReservas
+
+Reloads reservations using previously stored filters.
+
+```dart
+Future<void> recargarReservas() async
+```
+
+**Behavior:**
+- Only reloads if phone and business ID were previously set
+- Uses same filters as last `cargarReservasFiltradas` call
+- Called automatically after successful cancellation
+
+**Source:** `mis_reservas_cubit.dart:46`
+
+### cancelarReserva
+
+Cancels a reservation and reloads the list.
+
+```dart
+Future<void> cancelarReserva(String reservaId) async
+```
+
+**Parameters:**
+- `reservaId`: ID of reservation to cancel
+
+**State Transitions:**
+1. `MisReservasCargando` → Processing cancellation
+2. `ReservaCancelada` → Success with message
+3. `MisReservasExitoso` → Automatically reloaded list
+4. `ReservaCancelacionError` → If cancellation fails (still attempts reload)
+
+**Source:** `mis_reservas_cubit.dart:55`
+
+**Important:** Cancellation delegates to `CancelarReserva` use case which:
+- Validates business rules (cancellation window)
+- Updates reservation status
+- Sends cancellation email notifications
+- Records cancellation in history
+
+## Properties
+
+### telefonoVerificado
+
+Returns the currently verified phone number.
+
+```dart
+String? get telefonoVerificado => _telefonoVerificado;
+```
+
+### negocioId
+
+Returns the current restaurant ID.
+
+```dart
+String? get negocioId => _negocioId;
+```
+
+## State Transition Diagram
+
+```
+MisReservasInicial
+    ↓ cargarReservasFiltradas()
+MisReservasCargando
+    ↓ success
+MisReservasExitoso (with reservations)
+    ↓ cancelarReserva()
+MisReservasCargando
+    ↓ success
+ReservaCancelada
+    ↓ automatic reload
+MisReservasCargando
+    ↓ success
+MisReservasExitoso (updated list)
+
+(Errors transition to MisReservasConError or ReservaCancelacionError)
+```
+
+## Usage Example
+
+From `mis_reservas_screen.dart:22`:
+
+```dart
+// 1. Create Cubit
+BlocProvider(
+  create: (context) => MisReservasCubit(),
+  child: _MisReservasView(negocioId: negocioId),
+)
+
+// 2. After SMS verification, load filtered reservations
+context.read<MisReservasCubit>().cargarReservasFiltradas(
+  telefono: '+54 9 261 123-4567',
+  negocioId: 'negocio_001',
+);
+
+// 3. Listen to state changes with consumer
+BlocConsumer<MisReservasCubit, MisReservasState>(
+  listener: (context, state) {
+    if (state is ReservaCancelada) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(state.mensaje),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else if (state is ReservaCancelacionError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(state.mensaje),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  },
+  builder: (context, state) {
+    if (state is MisReservasCargando) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
+    if (state is MisReservasExitoso) {
+      if (state.reservas.isEmpty) {
+        return _buildEmptyState();
+      }
+      return ListView.builder(
+        itemCount: state.reservas.length,
+        itemBuilder: (context, index) {
+          return _buildReservaCard(state.reservas[index]);
+        },
+      );
+    }
+    
+    if (state is MisReservasConError) {
+      return _buildErrorState(state.mensaje);
+    }
+    
+    return const SizedBox.shrink();
+  },
+)
+
+// 4. Cancel a reservation
+context.read<MisReservasCubit>().cancelarReserva('reserva_123');
+
+// 5. Manual reload
+context.read<MisReservasCubit>().recargarReservas();
+```
+
+## Complete User Flow Example
+
+From `mis_reservas_screen.dart:427`:
+
+```dart
+// Customer verification flow
+void _onVerificacionExitosa(String telefono) {
+  final negocioId = widget.negocioId ?? 'default';
+  
+  setState(() {
+    _verificado = true;
+  });
+  
+  // Load filtered reservations
+  context.read<MisReservasCubit>().cargarReservasFiltradas(
+    telefono: telefono,
+    negocioId: negocioId,
+  );
+}
+
+// Cancellation confirmation dialog
+void _showCancelarDialog(BuildContext context, String reservaId) {
+  showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Cancelar Reserva'),
+      content: const Text(
+        '¿Estás seguro de que deseas cancelar esta reserva?\n\n'
+        'Esta acción no se puede deshacer.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('No, mantener'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.of(dialogContext).pop();
+            context.read<MisReservasCubit>().cancelarReserva(reservaId);
+          },
+          child: const Text('Sí, cancelar'),
+        ),
+      ],
+    ),
+  );
+}
+```
+
+## Integration Points
+
+### With Repositories
+- `ReservaRepositorio`: Filtered reservation queries
+
+### With Use Cases
+- `CancelarReserva`: Handles cancellation business logic and notifications
+
+### With Services
+- `ServicioVerificacionCliente`: SMS verification before loading reservations
+
+### With UI Components
+- `MisReservasScreen`: Customer reservation list interface
+- SMS verification dialog verifies phone before calling `cargarReservasFiltradas`
+- Reservation cards display data from `MisReservasExitoso.reservas`
+- Cancel button triggers confirmation dialog then `cancelarReserva`
+
+## Security Considerations
+
+1. **Phone Verification**: Reservations only loaded after SMS verification
+2. **Filtered Queries**: Server-side filtering ensures customers only see their reservations
+3. **No Direct Access**: Cubit requires verification flow; can't be bypassed
+4. **Immutable Phone Context**: Once loaded, phone number is cached for session
+
+## Error Handling
+
+The Cubit handles errors gracefully:
+
+```dart
+try {
+  await _cancelarReserva.ejecutar(reservaId, negocioId: idNegocio);
+  emit(ReservaCancelada('Reserva cancelada exitosamente'));
+  await recargarReservas();
+} catch (e) {
+  print('❌ Error al cancelar reserva: $e');
+  emit(ReservaCancelacionError(
+    'Error al cancelar: ${e.toString().replaceAll('Exception: ', '')}'
+  ));
+  try { 
+    await recargarReservas(); 
+  } catch (_) {}
+}
+```
+
+**Key Points:**
+- Errors are logged for debugging
+- User-friendly messages in states
+- Attempts to reload even after errors for data consistency
+- Exception messages cleaned up for display
+
+## State Management Pattern
+
+This Cubit follows these patterns:
+
+1. **Verification First**: Requires phone verification before operations
+2. **Auto-Reload**: Automatically reloads after mutations
+3. **Consistent State**: Always attempts to show current data
+4. **Listener Pattern**: Uses `BlocConsumer` for one-time events (snackbars)
+5. **Builder Pattern**: Uses `BlocBuilder` for UI rendering
+6. **Filter Caching**: Stores filters for easy reload without re-verification
+
+## Related Documentation
+
+- [DisponibilidadCubit](/api/state/disponibilidad-cubit) - Creating reservations
+- [PantallaDuenoCubit](/api/state/pantalla-dueno-cubit) - Owner reservation management
+- [Reserva Entity](/api/domain/reserva) - Reservation entity
+- [CancelarReserva Use Case](/api/use-cases/cancelar-reserva) - Cancellation logic
+- [ServicioVerificacionCliente](/api/services/servicio-verificacion-cliente) - SMS verification

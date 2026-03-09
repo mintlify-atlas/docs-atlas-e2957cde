@@ -1,0 +1,285 @@
+---
+title: 'Negocio'
+description: 'Entity representing a restaurant business'
+icon: 'store'
+---
+
+## Overview
+
+The `Negocio` class represents a restaurant business in the system. It contains business information, contact details, configuration settings for reservations, and zone management.
+
+## Class Definition
+
+```dart
+class Negocio {
+  final String id;
+  final String nombre;
+  final String nombreResponsable;
+  final String email;
+  final String telefono;
+  final String direccion;
+  final String descripcion;
+  final String especialidad;
+  final String icono;
+  
+  // Time Configuration
+  final int minHorasParaCancelar;
+  final int maxDiasAnticipacionReserva;
+  final int duracionPromedioMinutos;
+  
+  // Zone Configuration
+  final List<String> zonas;
+  final bool telefonoVerificado;
+}
+```
+
+## Properties
+
+### Basic Information
+
+<ParamField path="id" type="String" required>
+  Unique identifier for the business
+</ParamField>
+
+<ParamField path="nombre" type="String" required>
+  Name of the restaurant
+</ParamField>
+
+<ParamField path="nombreResponsable" type="String" required>
+  Name of the business owner or manager
+</ParamField>
+
+<ParamField path="email" type="String" required>
+  Contact email address
+</ParamField>
+
+<ParamField path="telefono" type="String" required>
+  Contact phone number
+</ParamField>
+
+<ParamField path="direccion" type="String" required>
+  Physical address of the restaurant
+</ParamField>
+
+<ParamField path="descripcion" type="String" default="''">
+  Description or additional information about the restaurant
+</ParamField>
+
+<ParamField path="especialidad" type="String" default="''">
+  Cuisine specialty or type (e.g., "Mediterránea", "Italiana")
+</ParamField>
+
+<ParamField path="icono" type="String" default="'restaurant'">
+  Icon identifier for the restaurant (e.g., 'sailing', 'restaurant', 'local_fire_department')
+</ParamField>
+
+### Time Configuration
+
+<ParamField path="minHorasParaCancelar" type="int" default="24">
+  Minimum hours in advance required to cancel a reservation
+</ParamField>
+
+<ParamField path="maxDiasAnticipacionReserva" type="int" default="14">
+  Maximum days in advance that reservations can be made
+</ParamField>
+
+<ParamField path="duracionPromedioMinutos" type="int" default="60">
+  Average duration of a reservation in minutes
+</ParamField>
+
+### Status & Zones
+
+<ParamField path="telefonoVerificado" type="bool" default="false">
+  Whether the business phone number has been verified
+</ParamField>
+
+<ParamField path="zonas" type="List<String>" default="['Salón', 'Terraza']">
+  List of zones or areas available in the restaurant
+</ParamField>
+
+## Constructor
+
+```dart
+Negocio({
+  required this.id,
+  required this.nombre,
+  required this.nombreResponsable,
+  required this.email,
+  required this.telefono,
+  required this.direccion,
+  this.descripcion = '',
+  this.especialidad = '',
+  this.icono = 'restaurant',
+  this.minHorasParaCancelar = 24,
+  this.maxDiasAnticipacionReserva = 14,
+  this.duracionPromedioMinutos = 60,
+  this.telefonoVerificado = false,
+  this.zonas = const ['Salón', 'Terraza'],
+})
+```
+
+## Methods
+
+### copyWith()
+
+Creates a copy of the business with specified fields updated.
+
+```dart
+Negocio copyWith({
+  String? id,
+  String? nombre,
+  String? nombreResponsable,
+  String? email,
+  String? telefono,
+  String? direccion,
+  String? descripcion,
+  String? especialidad,
+  String? icono,
+  int? minHorasParaCancelar,
+  int? maxDiasAnticipacionReserva,
+  int? duracionPromedioMinutos,
+  bool? telefonoVerificado,
+  List<String>? zonas,
+})
+```
+
+**Returns:** `Negocio` - A new instance with updated fields
+
+## Usage Examples
+
+### Creating a Basic Restaurant
+
+```dart
+final restaurante = Negocio(
+  id: 'rest-001',
+  nombre: 'La Cocina de María',
+  nombreResponsable: 'María González',
+  email: '[email protected]',
+  telefono: '+34912345678',
+  direccion: 'Calle Mayor 123, Madrid',
+);
+```
+
+### Creating a Restaurant with Full Configuration
+
+```dart
+final restaurante = Negocio(
+  id: 'rest-002',
+  nombre: 'El Pescador',
+  nombreResponsable: 'Carlos Martínez',
+  email: '[email protected]',
+  telefono: '+34923456789',
+  direccion: 'Puerto Marina 45, Barcelona',
+  descripcion: 'Restaurante especializado en pescados y mariscos frescos',
+  especialidad: 'Pescados y Mariscos',
+  icono: 'sailing',
+  minHorasParaCancelar: 48,
+  maxDiasAnticipacionReserva: 30,
+  duracionPromedioMinutos: 90,
+  telefonoVerificado: true,
+  zonas: ['Salón Principal', 'Terraza Vista al Mar', 'Sala Privada'],
+);
+```
+
+### Updating Restaurant Configuration
+
+```dart
+final restauranteOriginal = Negocio(
+  id: 'rest-001',
+  nombre: 'La Cocina de María',
+  nombreResponsable: 'María González',
+  email: '[email protected]',
+  telefono: '+34912345678',
+  direccion: 'Calle Mayor 123, Madrid',
+);
+
+// Update cancellation policy and add new zones
+final restauranteActualizado = restauranteOriginal.copyWith(
+  minHorasParaCancelar: 48,
+  zonas: ['Salón', 'Terraza', 'VIP', 'Jardín'],
+  descripcion: 'Restaurante familiar con más de 25 años de tradición',
+);
+```
+
+### Validating Reservation Timeframes
+
+```dart
+final restaurante = Negocio(
+  id: 'rest-001',
+  nombre: 'La Cocina de María',
+  nombreResponsable: 'María González',
+  email: '[email protected]',
+  telefono: '+34912345678',
+  direccion: 'Calle Mayor 123, Madrid',
+  minHorasParaCancelar: 24,
+  maxDiasAnticipacionReserva: 14,
+);
+
+final fechaReserva = DateTime.now().add(Duration(days: 7));
+final diasAnticipacion = fechaReserva.difference(DateTime.now()).inDays;
+
+if (diasAnticipacion <= restaurante.maxDiasAnticipacionReserva) {
+  print('Reserva permitida');
+} else {
+  print('No se pueden hacer reservas con más de ${restaurante.maxDiasAnticipacionReserva} días de anticipación');
+}
+```
+
+### Working with Restaurant Zones
+
+```dart
+final restaurante = Negocio(
+  id: 'rest-001',
+  nombre: 'La Cocina de María',
+  nombreResponsable: 'María González',
+  email: '[email protected]',
+  telefono: '+34912345678',
+  direccion: 'Calle Mayor 123, Madrid',
+  zonas: ['Salón', 'Terraza', 'VIP'],
+);
+
+print('Zonas disponibles:');
+for (final zona in restaurante.zonas) {
+  print('- $zona');
+}
+
+// Check if a specific zone exists
+final zonaSeleccionada = 'Terraza';
+if (restaurante.zonas.contains(zonaSeleccionada)) {
+  print('$zonaSeleccionada está disponible');
+}
+```
+
+## Icon Options
+
+Common Material Design icon identifiers that can be used:
+
+- `restaurant` - Standard restaurant icon
+- `dining` - Dining icon
+- `local_fire_department` - Fire/grill icon
+- `sailing` - Nautical/seafood restaurants
+- `set_meal` - Traditional meals
+- `rice_bowl` - Asian cuisine
+- `wine_bar` - Wine bars
+- `local_pizza` - Pizza restaurants
+- `local_cafe` - Cafes
+
+## Configuration Best Practices
+
+### Cancellation Policy
+
+- **Casual restaurants:** 24 hours minimum
+- **Fine dining:** 48-72 hours minimum
+- **Special events:** 7+ days minimum
+
+### Advance Booking
+
+- **Small restaurants:** 7-14 days maximum
+- **Popular restaurants:** 30 days maximum
+- **Fine dining:** 60-90 days maximum
+
+### Average Duration
+
+- **Quick service:** 30-45 minutes
+- **Casual dining:** 60-90 minutes
+- **Fine dining:** 120-180 minutes

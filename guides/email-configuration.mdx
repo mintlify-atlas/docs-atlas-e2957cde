@@ -1,0 +1,432 @@
+---
+title: Email Configuration
+description: Set up automated email notifications using Firebase Trigger Email extension
+---
+
+## Overview
+
+The Restaurant Reservation System sends automated email notifications to customers and restaurant owners using the **Firebase Trigger Email Extension**. This extension monitors a Firestore collection and sends emails automatically.
+
+## How It Works
+
+The app uses a **queue-based email system**:
+
+1. Your app writes an email document to the `mail` collection in Firestore
+2. The Firebase Trigger Email extension detects the new document
+3. The extension sends the email via SMTP (Gmail, SendGrid, etc.)
+4. The extension updates the document with delivery status
+
+## Architecture
+
+```mermaid
+graph LR
+    A[App] -->|Write to 'mail' collection| B[Firestore]
+    B -->|Trigger| C[Email Extension]
+    C -->|Send via SMTP| D[Email Provider]
+    D -->|Deliver| E[Recipient]
+    C -->|Update status| B
+```
+
+## Install Firebase Trigger Email Extension
+
+<Steps>
+  <Step title="Install the Extension">
+    1. Go to [Firebase Console](https://console.firebase.google.com/)
+    2. Navigate to **Extensions** in the left sidebar
+    3. Click **Install Extension**
+    4. Search for **"Trigger Email"**
+    5. Click **Install** on the official Firebase extension
+  </Step>
+
+  <Step title="Configure SMTP Settings">
+    During installation, you'll be prompted for:
+
+    | Setting | Description | Example |
+    |---------|-------------|----------|
+    | **SMTP Connection URI** | Your email provider's SMTP server | `smtps://user@gmail.com:password@smtp.gmail.com:465` |
+    | **Email Collection** | Firestore collection to monitor | `mail` |
+    | **Default FROM** | Sender email address | `noreply@your-domain.com` |
+    | **Default REPLY-TO** | Reply-to email address | `support@your-domain.com` |
+
+    ### Gmail SMTP Example
+    ```
+    smtps://your-email@gmail.com:your-app-password@smtp.gmail.com:465
+    ```
+
+    <Warning>
+      For Gmail, you must use an **App Password**, not your regular password. Generate one at: [Google Account App Passwords](https://myaccount.google.com/apppasswords)
+    </Warning>
+
+    ### SendGrid Example
+    ```
+    smtps://apikey:YOUR_SENDGRID_API_KEY@smtp.sendgrid.net:465
+    ```
+  </Step>
+
+  <Step title="Configure Firestore Collection">
+    Set the email documents collection name to:
+    ```
+    mail
+    ```
+
+    This matches the collection used in `ServicioEmail`.
+  </Step>
+
+  <Step title="Set Firestore Location">
+    Choose the same location as your Firestore database (e.g., `us-central1`).
+  </Step>
+</Steps>
+
+## Email Service Implementation
+
+The `ServicioEmail` class handles all email operations:
+
+### Service Location
+
+```dart
+lib/adaptadores/servicio_email.dart
+```
+
+### Basic Usage
+
+```dart
+import 'package:app_restaurante/adaptadores/servicio_email.dart';
+
+final emailService = ServicioEmail();
+
+// Send reservation confirmation to customer
+await emailService.enviarReservaConfirmada(
+  emailCliente: 'customer@example.com',
+  nombreCliente: 'Juan Pérez',
+  nombreNegocio: 'Restaurante El Buen Sabor',
+  fechaHora: DateTime(2024, 12, 25, 20, 0),
+  nombreMesa: 'Mesa VIP-1',
+  numeroPersonas: 4,
+);
+```
+
+### Email Types
+
+The service provides these email methods:
+
+#### 1. Customer Emails
+
+**Reservation Confirmed**
+```dart
+await emailService.enviarReservaConfirmada(
+  emailCliente: 'customer@example.com',
+  nombreCliente: 'María García',
+  nombreNegocio: 'Restaurante Mar y Tierra',
+  fechaHora: DateTime(2024, 12, 31, 21, 30),
+  nombreMesa: 'Mesa Terraza-3',
+  numeroPersonas: 2,
+  telefono: '+5491112345678',
+  reservaId: 'res_abc123',
+);
+```
+
+**Reservation Cancelled by Customer**
+```dart
+await emailService.enviarReservaCanceladaPorCliente(
+  emailCliente: 'customer@example.com',
+  nombreCliente: 'Carlos López',
+  nombreNegocio: 'Restaurante El Mirador',
+  fechaHora: DateTime(2024, 12, 20, 19, 0),
+  nombreMesa: 'Mesa Salón-2',
+  numeroPersonas: 6,
+);
+```
+
+**Reservation Cancelled by Restaurant**
+```dart
+await emailService.enviarReservaCanceladaPorRestaurante(
+  emailCliente: 'customer@example.com',
+  nombreCliente: 'Ana Martínez',
+  nombreNegocio: 'Restaurante La Esquina',
+  fechaHora: DateTime(2024, 12, 18, 20, 30),
+  nombreMesa: 'Mesa Patio-1',
+  numeroPersonas: 4,
+  motivo: 'Evento privado programado para esa fecha',
+);
+```
+
+#### 2. Owner Emails
+
+**New Reservation Notification**
+```dart
+await emailService.enviarNuevaReservaAlDueno(
+  emailDueno: 'owner@restaurant.com',
+  nombreCliente: 'Roberto Sánchez',
+  emailCliente: 'roberto@example.com',
+  telefonoCliente: '+5491198765432',
+  fechaHora: DateTime(2024, 12, 22, 21, 0),
+  nombreMesa: 'Mesa VIP-2',
+  numeroPersonas: 8,
+  nombreNegocio: 'Restaurante Los Arcos',
+);
+```
+
+**Cancellation by Customer**
+```dart
+await emailService.enviarCancelacionClienteAlDueno(
+  emailDueno: 'owner@restaurant.com',
+  nombreCliente: 'Laura Fernández',
+  fechaHora: DateTime(2024, 12, 19, 19, 30),
+  nombreMesa: 'Mesa Jardín-4',
+  numeroPersonas: 3,
+  nombreNegocio: 'Restaurante Vista al Mar',
+);
+```
+
+### Convenience Methods
+
+Use these methods with `Reserva` entities:
+
+```dart
+// Notify both customer and owner about new reservation
+await emailService.notificarReservaConfirmada(
+  reserva,
+  nombreNegocio: 'Mi Restaurante',
+  nombreMesa: 'Mesa VIP-1',
+  emailDueno: 'owner@restaurant.com',
+);
+
+// Notify about customer cancellation
+await emailService.notificarReservaCanceladaPorCliente(
+  reserva,
+  nombreNegocio: 'Mi Restaurante',
+  nombreMesa: 'Mesa Terraza-2',
+  emailDueno: 'owner@restaurant.com',
+);
+
+// Notify customer about restaurant cancellation
+await emailService.notificarReservaCanceladaPorRestaurante(
+  reserva,
+  nombreNegocio: 'Mi Restaurante',
+  nombreMesa: 'Mesa Salón-5',
+  motivo: 'Reparaciones de emergencia',
+);
+```
+
+## Email Templates
+
+All emails use responsive HTML templates with:
+
+- Professional design with restaurant branding
+- Color-coded status indicators (green for confirmed, red for cancelled)
+- Reservation details table
+- Important reminders and tips
+- Auto-generated footer with year and disclaimer
+
+### Template Structure
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: white;">
+    
+    <!-- Header with title -->
+    <div style="background-color: #27AE60; padding: 30px; text-align: center;">
+      <h1 style="color: white; margin: 0;">✅ Reserva Confirmada</h1>
+    </div>
+
+    <!-- Content with reservation details -->
+    <div style="padding: 30px;">
+      <!-- Email-specific content -->
+    </div>
+
+    <!-- Footer -->
+    <div style="background-color: #f5f5f5; padding: 20px; text-align: center;">
+      <p style="margin: 0; color: #666;">© 2024 Sistema de Reservas</p>
+      <p style="margin: 8px 0 0 0; color: #999;">Email automático, no responder</p>
+    </div>
+
+  </div>
+</body>
+</html>
+```
+
+### Color Scheme
+
+| Status | Color | Hex Code |
+|--------|-------|----------|
+| Confirmed | Green | `#27AE60` |
+| Cancelled | Red | `#F44336` |
+| Warning | Orange | `#FF9800` |
+| Info | Blue | `#2196F3` |
+
+## Integration with Use Cases
+
+Emails are automatically sent from use cases:
+
+### Creating a Reservation
+
+```dart lib/aplicacion/crear_reserva.dart
+class CrearReserva {
+  final ServicioEmail? servicioEmail;
+  
+  Future<Reserva> ejecutar(...) async {
+    // ... validation and creation logic ...
+    
+    final reserva = await reservaRepositorio.crearReserva(reservaTemporal);
+
+    // Send emails automatically
+    if (servicioEmail != null) {
+      try {
+        await servicioEmail!.notificarReservaConfirmada(
+          reserva,
+          nombreNegocio: nombreNegocio,
+          nombreMesa: nombreMesa,
+          emailDueno: emailDueno,
+        );
+      } catch (e) {
+        // Don't fail reservation if email fails
+        print('⚠️ Error sending email: $e');
+      }
+    }
+
+    return reserva;
+  }
+}
+```
+
+### Cancelling a Reservation
+
+```dart lib/aplicacion/cancelar_reserva.dart
+class CancelarReserva {
+  Future<void> ejecutar(String reservaId) async {
+    // ... cancellation logic ...
+    
+    // Notify via email
+    await servicioEmail.notificarReservaCanceladaPorCliente(
+      reserva,
+      nombreNegocio: negocio.nombre,
+      nombreMesa: mesa.nombre,
+      emailDueno: negocio.email,
+    );
+  }
+}
+```
+
+## Monitoring Email Delivery
+
+The Firebase Trigger Email extension updates each email document with delivery status:
+
+```javascript
+{
+  "to": ["customer@example.com"],
+  "message": {
+    "subject": "✅ Reserva confirmada",
+    "html": "..."
+  },
+  "delivery": {
+    "state": "SUCCESS",
+    "startTime": "2024-12-10T15:30:00.000Z",
+    "endTime": "2024-12-10T15:30:02.123Z",
+    "info": {
+      "messageId": "<abc123@smtp.gmail.com>"
+    }
+  }
+}
+```
+
+### Delivery States
+
+| State | Description |
+|-------|-------------|
+| `PENDING` | Email queued, not yet processed |
+| `PROCESSING` | Extension is sending the email |
+| `SUCCESS` | Email sent successfully |
+| `ERROR` | Failed to send (check `error` field) |
+
+### Query Email Status
+
+```dart
+final mailDoc = await FirebaseFirestore.instance
+  .collection('mail')
+  .doc('email_doc_id')
+  .get();
+
+final delivery = mailDoc.data()?['delivery'];
+final state = delivery?['state']; // SUCCESS, ERROR, etc.
+```
+
+## Testing Emails
+
+### Test in Development
+
+```dart
+void main() async {
+  // Initialize Firebase
+  await Firebase.initializeApp();
+  
+  final emailService = ServicioEmail();
+  
+  // Send test email
+  await emailService.enviarReservaConfirmada(
+    emailCliente: 'your-test-email@example.com',
+    nombreCliente: 'Test User',
+    nombreNegocio: 'Test Restaurant',
+    fechaHora: DateTime.now().add(Duration(days: 7)),
+    nombreMesa: 'Test Table',
+    numeroPersonas: 2,
+  );
+  
+  print('✅ Test email sent! Check your inbox.');
+}
+```
+
+### Verify Email Delivery
+
+1. Check the `mail` collection in Firestore Console
+2. Look for the document you just created
+3. Verify the `delivery.state` is `SUCCESS`
+4. Check your email inbox
+
+<Tip>
+  Use a service like [MailHog](https://github.com/mailhog/MailHog) or [Mailtrap](https://mailtrap.io/) for testing emails in development without sending real emails.
+</Tip>
+
+## Troubleshooting
+
+### Emails not sending
+
+1. **Check Firestore Collection**: Verify documents are being created in `mail` collection
+2. **Check Extension Logs**: Firebase Console → Extensions → Trigger Email → Logs
+3. **Verify SMTP Credentials**: Test SMTP connection manually
+4. **Check Security Rules**: Ensure the extension can read/write to `mail` collection
+
+### Gmail SMTP issues
+
+- Use **App Password**, not your regular password
+- Enable "Less secure app access" (if using old Gmail)
+- Check for "suspicious activity" alerts from Google
+
+### SendGrid issues
+
+- Verify API key has "Mail Send" permission
+- Check SendGrid activity logs
+- Ensure sender email is verified in SendGrid
+
+## Production Best Practices
+
+<Warning>
+  Never hardcode SMTP credentials in your code. Use Firebase Remote Config or environment variables.
+</Warning>
+
+1. **Use a custom domain**: Configure a professional sender email (e.g., `reservas@turestaurante.com`)
+2. **Set up SPF/DKIM**: Prevent emails from going to spam
+3. **Monitor delivery rates**: Track `SUCCESS` vs `ERROR` states in Firestore
+4. **Rate limiting**: Be aware of SMTP provider limits (Gmail: 500/day, SendGrid varies by plan)
+5. **Handle failures gracefully**: Don't fail reservations if emails fail
+
+## Next Steps
+
+- [Firebase Setup](/guides/firebase-setup) - Configure Firebase project
+- [State Management](/guides/state-management) - Learn BLoC patterns for email flows
+- [Testing](/guides/testing) - Write tests for email service

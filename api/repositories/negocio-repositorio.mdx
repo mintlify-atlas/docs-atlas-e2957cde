@@ -1,0 +1,467 @@
+---
+title: NegocioRepositorio
+description: Repository interface and Firestore implementation for managing restaurant businesses
+---
+
+## Overview
+
+The `NegocioRepositorio` defines the contract for restaurant business management, including registration, authentication, profile updates, and configuration. The Firestore implementation (`NegocioRepositorioFirestore`) provides persistent storage with built-in validation and safe type conversion.
+
+## Interface
+
+```dart lib/dominio/repositorios/negocio_repositorio.dart
+abstract class NegocioRepositorio {
+  Future<Negocio?> registrarNegocio({
+    required String nombre,
+    required String nombreResponsable,
+    required String email,
+    required String telefono,
+    required String direccion,
+    required String password,
+  });
+
+  Future<Negocio?> autenticarNegocio({
+    required String email,
+    required String password,
+  });
+
+  Future<List<Negocio>> obtenerTodosLosNegocios();
+  Future<Negocio?> obtenerNegocioPorId(String id);
+  Future<Negocio?> obtenerNegocioPorEmail(String email);
+  Future<bool> actualizarNegocio(Negocio negocio);
+  Future<bool> actualizarEmail(String negocioId, String nuevoEmail);
+  Future<bool> actualizarPassword(String negocioId, String nuevaPassword);
+  Future<bool> actualizarTelefono(String negocioId, String nuevoTelefono, {bool verificado = false});
+  Future<bool> actualizarZonas(String negocioId, List<String> zonas);
+}
+```
+
+## Methods
+
+### registrarNegocio
+
+Registers a new restaurant business in the system.
+
+<ParamField path="nombre" type="String" required>
+  The restaurant's name.
+</ParamField>
+
+<ParamField path="nombreResponsable" type="String" required>
+  The name of the person responsible for managing the restaurant.
+</ParamField>
+
+<ParamField path="email" type="String" required>
+  The restaurant's email address (must be unique).
+</ParamField>
+
+<ParamField path="telefono" type="String" required>
+  The restaurant's contact phone number.
+</ParamField>
+
+<ParamField path="direccion" type="String" required>
+  The restaurant's physical address.
+</ParamField>
+
+<ParamField path="password" type="String" required>
+  The password for authentication (stored as plain text in this implementation - see security note).
+</ParamField>
+
+<ResponseField name="Future<Negocio?>" type="Negocio?">
+  Returns the created business entity with its assigned ID, or `null` if registration fails (e.g., email already exists).
+</ResponseField>
+
+**Default Values:**
+- `descripcion`: Empty string
+- `especialidad`: Empty string
+- `minHorasParaCancelar`: 24 hours
+- `maxDiasAnticipacionReserva`: 14 days
+- `duracionPromedioMinutos`: 60 minutes
+
+<Warning>
+This implementation stores passwords in plain text. In production, use Firebase Authentication or hash passwords using bcrypt/argon2.
+</Warning>
+
+```dart Example Usage
+final negocio = await repositorio.registrarNegocio(
+  nombre: 'La Terraza del Mar',
+  nombreResponsable: 'María García',
+  email: 'contacto@terrazadelmar.com',
+  telefono: '+34912345678',
+  direccion: 'Calle Mayor 15, Madrid',
+  password: 'secure_password_here',
+);
+
+if (negocio != null) {
+  print('Restaurante registrado con ID: ${negocio.id}');
+} else {
+  print('El email ya está registrado');
+}
+```
+
+---
+
+### autenticarNegocio
+
+Authenticates a restaurant business using email and password.
+
+<ParamField path="email" type="String" required>
+  The restaurant's email address.
+</ParamField>
+
+<ParamField path="password" type="String" required>
+  The restaurant's password.
+</ParamField>
+
+<ResponseField name="Future<Negocio?>" type="Negocio?">
+  Returns the business entity if authentication succeeds, or `null` if credentials are invalid.
+</ResponseField>
+
+**Authentication Flow:**
+1. Queries Firestore for a business with the provided email
+2. Compares the stored password with the provided password (plain text comparison)
+3. Returns the business entity if credentials match
+
+```dart Example Usage
+final negocio = await repositorio.autenticarNegocio(
+  email: 'contacto@terrazadelmar.com',
+  password: 'secure_password_here',
+);
+
+if (negocio != null) {
+  print('Bienvenido, ${negocio.nombre}');
+  // Store session, navigate to dashboard, etc.
+} else {
+  print('Credenciales incorrectas');
+}
+```
+
+---
+
+### obtenerTodosLosNegocios
+
+Retrieves all registered businesses, ordered alphabetically by name.
+
+<ResponseField name="Future<List<Negocio>>" type="List<Negocio>">
+  Returns a list of all businesses. Returns an empty list on error.
+</ResponseField>
+
+```dart Example Usage
+final negocios = await repositorio.obtenerTodosLosNegocios();
+print('Total de restaurantes: ${negocios.length}');
+
+for (final negocio in negocios) {
+  print('${negocio.nombre} - ${negocio.direccion}');
+}
+```
+
+---
+
+### obtenerNegocioPorId
+
+Retrieves a specific business by its unique identifier.
+
+<ParamField path="id" type="String" required>
+  The business's unique identifier.
+</ParamField>
+
+<ResponseField name="Future<Negocio?>" type="Negocio?">
+  Returns the business if found, or `null` if it doesn't exist or there's an error.
+</ResponseField>
+
+```dart Example Usage
+final negocio = await repositorio.obtenerNegocioPorId('negocio_abc');
+if (negocio != null) {
+  print('Restaurante: ${negocio.nombre}');
+  print('Teléfono: ${negocio.telefono}');
+}
+```
+
+---
+
+### obtenerNegocioPorEmail
+
+Retrieves a business by its email address.
+
+<ParamField path="email" type="String" required>
+  The business's email address.
+</ParamField>
+
+<ResponseField name="Future<Negocio?>" type="Negocio?">
+  Returns the business if found, or `null` if no business with that email exists.
+</ResponseField>
+
+**Use Cases:**
+- Check if an email is already registered before creating a new account
+- Password recovery flows
+- Email uniqueness validation
+
+```dart Example Usage
+final existente = await repositorio.obtenerNegocioPorEmail('nuevo@email.com');
+if (existente != null) {
+  print('Este email ya está en uso');
+} else {
+  print('Email disponible para registro');
+}
+```
+
+---
+
+### actualizarNegocio
+
+Updates a business's complete profile information.
+
+<ParamField path="negocio" type="Negocio" required>
+  The business entity with updated information. Must include a valid ID.
+</ParamField>
+
+<ResponseField name="Future<bool>" type="bool">
+  Returns `true` if the update was successful, `false` otherwise.
+</ResponseField>
+
+**Updated Fields:**
+- `nombre` - Restaurant name
+- `nombreResponsable` - Manager name
+- `email` - Contact email
+- `telefono` - Phone number
+- `direccion` - Physical address
+- `descripcion` - Description text
+- `especialidad` - Cuisine specialty
+- `icono` - Icon identifier
+- `minHorasParaCancelar` - Minimum cancellation notice (hours)
+- `maxDiasAnticipacionReserva` - Maximum advance booking (days)
+- `duracionPromedioMinutos` - Average reservation duration
+- `telefonoVerificado` - Phone verification status
+- `zonas` - Available seating zones
+
+```dart Example Usage
+final negocio = await repositorio.obtenerNegocioPorId('negocio_abc');
+if (negocio != null) {
+  final actualizado = negocio.copyWith(
+    descripcion: 'Cocina mediterránea con vistas al mar',
+    especialidad: 'Mariscos frescos',
+  );
+  
+  final exitoso = await repositorio.actualizarNegocio(actualizado);
+  if (exitoso) {
+    print('Perfil actualizado correctamente');
+  }
+}
+```
+
+---
+
+### actualizarEmail
+
+Updates a business's email address with uniqueness validation.
+
+<ParamField path="negocioId" type="String" required>
+  The business's unique identifier.
+</ParamField>
+
+<ParamField path="nuevoEmail" type="String" required>
+  The new email address to set.
+</ParamField>
+
+<ResponseField name="Future<bool>" type="bool">
+  Returns `true` if the email was updated, `false` if the email is already in use by another business.
+</ResponseField>
+
+**Validation:**
+- Checks if the new email is already used by another business
+- Allows updating to the same email (no-op but returns true)
+- Prevents email conflicts across different businesses
+
+```dart Example Usage
+final exitoso = await repositorio.actualizarEmail(
+  'negocio_abc',
+  'nuevo_contacto@terrazadelmar.com',
+);
+
+if (exitoso) {
+  print('Email actualizado correctamente');
+} else {
+  print('El email ya está en uso por otro restaurante');
+}
+```
+
+---
+
+### actualizarPassword
+
+Updates a business's password (for backup or legacy authentication).
+
+<ParamField path="negocioId" type="String" required>
+  The business's unique identifier.
+</ParamField>
+
+<ParamField path="nuevaPassword" type="String" required>
+  The new password to set.
+</ParamField>
+
+<ResponseField name="Future<bool>" type="bool">
+  Returns `true` if the password was updated successfully, `false` if the operation fails or the ID is empty.
+</ResponseField>
+
+<Warning>
+This stores passwords in plain text. Migrate to Firebase Authentication for production use.
+</Warning>
+
+```dart Example Usage
+final exitoso = await repositorio.actualizarPassword(
+  'negocio_abc',
+  'new_secure_password',
+);
+
+if (exitoso) {
+  print('Contraseña actualizada');
+}
+```
+
+---
+
+### actualizarTelefono
+
+Updates a business's phone number and verification status.
+
+<ParamField path="negocioId" type="String" required>
+  The business's unique identifier.
+</ParamField>
+
+<ParamField path="nuevoTelefono" type="String" required>
+  The new phone number to set.
+</ParamField>
+
+<ParamField path="verificado" type="bool" default="false">
+  Whether the phone number has been verified.
+</ParamField>
+
+<ResponseField name="Future<bool>" type="bool">
+  Returns `true` if the update was successful, `false` otherwise.
+</ResponseField>
+
+```dart Example Usage
+// Update and mark as unverified
+await repositorio.actualizarTelefono(
+  'negocio_abc',
+  '+34987654321',
+  verificado: false,
+);
+
+// After SMS verification code is confirmed
+await repositorio.actualizarTelefono(
+  'negocio_abc',
+  '+34987654321',
+  verificado: true,
+);
+```
+
+---
+
+### actualizarZonas
+
+Updates the list of available seating zones for a restaurant.
+
+<ParamField path="negocioId" type="String" required>
+  The business's unique identifier.
+</ParamField>
+
+<ParamField path="zonas" type="List<String>" required>
+  The new list of zone names (e.g., ["Salón", "Terraza", "VIP"]).
+</ParamField>
+
+<ResponseField name="Future<bool>" type="bool">
+  Returns `true` if the zones were updated successfully, `false` otherwise.
+</ResponseField>
+
+```dart Example Usage
+final zonasActualizadas = ['Salón Principal', 'Terraza', 'Sala VIP', 'Barra'];
+
+final exitoso = await repositorio.actualizarZonas(
+  'negocio_abc',
+  zonasActualizadas,
+);
+
+if (exitoso) {
+  print('Zonas actualizadas correctamente');
+}
+```
+
+---
+
+## Firestore Implementation
+
+### Collection Structure
+
+Businesses are stored in the `negocios` collection:
+
+```json Firestore Document
+{
+  "nombre": "La Terraza del Mar",
+  "nombreResponsable": "María García",
+  "email": "contacto@terrazadelmar.com",
+  "telefono": "+34912345678",
+  "direccion": "Calle Mayor 15, Madrid",
+  "password": "hashed_password_here",
+  "descripcion": "Cocina mediterránea con vistas al mar",
+  "especialidad": "Mariscos frescos",
+  "icono": "restaurant",
+  "minHorasParaCancelar": 24,
+  "maxDiasAnticipacionReserva": 14,
+  "duracionPromedioMinutos": 60,
+  "telefonoVerificado": true,
+  "zonas": ["Salón", "Terraza"]
+}
+```
+
+### Safe Type Conversion
+
+The implementation includes helper functions for safe type conversion when reading from Firestore:
+
+**`safeInt(value, defaultValue)`**
+- Handles: `int`, `double`, `String`, `null`
+- Converts doubles to integers
+- Parses numeric strings
+- Returns default value for invalid types
+
+**`safeBool(value, defaultValue)`**
+- Handles: `bool`, `String`, `null`
+- Parses "true"/"false" strings (case-insensitive)
+- Returns default value for invalid types
+
+**`safeList(value, defaultValue)`**
+- Handles: `List`, `null`
+- Converts list elements to strings
+- Returns default value for invalid types
+
+This robust conversion prevents runtime errors from inconsistent data types in Firestore.
+
+---
+
+## Related Types
+
+### Negocio Entity
+
+```dart
+class Negocio {
+  final String id;
+  final String nombre;
+  final String nombreResponsable;
+  final String email;
+  final String telefono;
+  final String direccion;
+  final String descripcion;
+  final String especialidad;
+  final String icono;
+  final int minHorasParaCancelar;
+  final int maxDiasAnticipacionReserva;
+  final int duracionPromedioMinutos;
+  final bool telefonoVerificado;
+  final List<String> zonas;
+}
+```
+
+## See Also
+
+- [MesaRepositorio](/api/repositories/mesa-repositorio) - Uses zones configured in Negocio
+- [HorarioAperturaRepositorio](/api/repositories/horario-apertura-repositorio) - Business hours for the restaurant
+- [HistoriaRepositorio](/api/repositories/historia-repositorio) - Restaurant story and specialties

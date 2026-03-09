@@ -1,0 +1,544 @@
+---
+title: 'Reservation Management'
+description: 'View, confirm, and cancel customer reservations from the admin panel'
+icon: 'calendar-check'
+---
+
+## Overview
+
+The reservation management system allows business owners to monitor, confirm, and cancel customer reservations. All reservation actions trigger automatic email notifications to keep customers informed.
+
+## Reservation Entity Structure
+
+Reservations in the system have the following structure:
+
+```dart
+enum EstadoReserva {
+  pendiente,   // Awaiting confirmation
+  confirmada,  // Confirmed by system
+  cancelada,   // Cancelled by customer or restaurant
+}
+
+class Reserva {
+  final String id;                  // Unique identifier
+  final String mesaId;              // Table assignment
+  final DateTime fechaHora;         // Reservation date and time
+  final int numeroPersonas;         // Party size
+  final int duracionMinutos;        // Duration (default: 60)
+  EstadoReserva estado;             // Current status
+  final String? contactoCliente;    // Customer email
+  final String? nombreCliente;      // Customer name
+  final String? telefonoCliente;    // Verified phone number
+  final String? negocioId;          // Restaurant ID
+}
+```
+
+Implementation: `source/lib/dominio/entidades/reserva.dart`
+
+## Viewing Reservations
+
+Business owners can view all reservations for their restaurant:
+
+```dart
+final cubit = context.read<PantallaDuenoCubit>();
+final reservas = await cubit.obtenerReservasDelNegocio(negocioId);
+
+print('Total reservations: ${reservas.length}');
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:302-315`
+
+### Reservation Filtering
+
+The system retrieves reservations by:
+
+<Steps>
+  <Step title="Get restaurant tables">
+    Fetch all tables belonging to the restaurant
+  </Step>
+  <Step title="Extract table IDs">
+    Create a set of table IDs for filtering
+  </Step>
+  <Step title="Filter reservations">
+    Return only reservations assigned to the restaurant's tables
+  </Step>
+</Steps>
+
+```dart
+final mesas = await mesaRepositorio.obtenerMesasPorNegocio(negocioId);
+final mesaIds = mesas.map((m) => m.id).toSet();
+
+final todasReservas = await reservaRepositorio.obtenerReserva();
+return todasReservas.where((r) => mesaIds.contains(r.mesaId)).toList();
+```
+
+## Reservation States
+
+Reservations progress through three states:
+
+<Steps>
+  <Step title="Pendiente (Pending)" icon="clock">
+    Initial state when reservation is created. Awaiting confirmation.
+  </Step>
+  <Step title="Confirmada (Confirmed)" icon="check">
+    Reservation has been confirmed and customer is expected to arrive.
+  </Step>
+  <Step title="Cancelada (Cancelled)" icon="xmark">
+    Reservation was cancelled by either customer or restaurant.
+  </Step>
+</Steps>
+
+### State Transitions
+
+```dart
+// Confirming a reservation
+void confirmar() {
+  if (estado == EstadoReserva.cancelada) {
+    throw Exception('Cannot confirm a cancelled reservation.');
+  }
+  if (estado == EstadoReserva.confirmada) {
+    throw Exception('Reservation is already confirmed.');
+  }
+  estado = EstadoReserva.confirmada;
+}
+```
+
+Implementation reference: `source/lib/dominio/entidades/reserva.dart:35-43`
+
+<Warning>
+Once a reservation is cancelled, it cannot be confirmed again. You must create a new reservation instead.
+</Warning>
+
+## Cancelling Reservations
+
+Business owners can cancel customer reservations through the admin panel:
+
+```dart
+final success = await cubit.cancelarReservaAdmin(
+  reservaId,
+  motivo: 'Table unavailable due to maintenance',
+);
+
+if (success) {
+  print('Reservation cancelled and customer notified');
+}
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:320-339`
+
+### Cancellation Process
+
+When a restaurant cancels a reservation:
+
+<Steps>
+  <Step title="Admin initiates cancellation">
+    Business owner clicks cancel button in admin panel
+  </Step>
+  <Step title="Optional reason provided">
+    Owner can provide an explanation for the cancellation
+  </Step>
+  <Step title="Use case executed">
+    `CancelarReserva` use case handles the cancellation logic
+  </Step>
+  <Step title="Reservation marked cancelled">
+    Status updated to `EstadoReserva.cancelada` in database
+  </Step>
+  <Step title="Customer notified">
+    Automatic email sent to customer explaining the cancellation
+  </Step>
+</Steps>
+
+### Cancellation Reasons
+
+Providing a cancellation reason helps maintain customer relations:
+
+**Good cancellation reasons:**
+- "Table unavailable due to scheduled maintenance"
+- "Restaurant closing early for private event"
+- "Unexpected staff shortage"
+- "Emergency building repairs"
+
+**Avoid vague reasons:**
+- "Cannot accommodate"
+- "Cancelled"
+- "Not available"
+
+<Tip>
+Always provide a clear, honest explanation when cancelling reservations. This helps maintain customer trust.
+</Tip>
+
+## Email Notifications
+
+All reservation actions trigger automatic email notifications through the `ServicioEmail` class.
+
+### Customer Notifications
+
+Customers receive emails for:
+
+<AccordionGroup>
+  <Accordion title="Reservation Confirmed" icon="envelope-circle-check">
+    Sent when a new reservation is created and confirmed.
+    
+    **Email includes:**
+    - Reservation confirmation badge
+    - Restaurant name and details
+    - Table assignment
+    - Date and time
+    - Party size
+    - Important reminders (arrive early, cancellation policy)
+    
+    Implementation: `source/lib/adaptadores/servicio_email.dart:18-72`
+  </Accordion>
+  
+  <Accordion title="Cancelled by Customer" icon="circle-xmark">
+    Sent when customer cancels their own reservation.
+    
+    **Email includes:**
+    - Cancellation confirmation
+    - Original reservation details
+    - Invitation to book again
+    
+    Implementation: `source/lib/adaptadores/servicio_email.dart:75-116`
+  </Accordion>
+  
+  <Accordion title="Cancelled by Restaurant" icon="triangle-exclamation">
+    Sent when restaurant cancels customer's reservation.
+    
+    **Email includes:**
+    - Apology and explanation
+    - Cancellation reason (if provided)
+    - Original reservation details
+    - Invitation to rebook
+    
+    Implementation: `source/lib/adaptadores/servicio_email.dart:119-175`
+  </Accordion>
+</AccordionGroup>
+
+### Business Owner Notifications
+
+Restaurant owners receive emails for:
+
+<AccordionGroup>
+  <Accordion title="New Reservation" icon="bell">
+    Notification when a customer creates a new reservation.
+    
+    **Email includes:**
+    - Customer contact information
+    - Reservation details
+    - Table assignment
+    - Party size and timing
+    
+    Implementation: `source/lib/adaptadores/servicio_email.dart:182-222`
+  </Accordion>
+  
+  <Accordion title="Customer Cancellation" icon="bell-slash">
+    Notification when a customer cancels their reservation.
+    
+    **Email includes:**
+    - Cancellation notice
+    - Original reservation details
+    - Note that table is now available
+    
+    Implementation: `source/lib/adaptadores/servicio_email.dart:225-258`
+  </Accordion>
+</AccordionGroup>
+
+### Email Template Structure
+
+All emails use a consistent HTML template:
+
+```html
+<!-- Header with restaurant branding -->
+<div style="background-color: #27AE60; padding: 30px;">
+  <h1 style="color: white;">Reservation Confirmed</h1>
+</div>
+
+<!-- Content with reservation details -->
+<div style="padding: 30px;">
+  <table>
+    <tr><td>👤 Name:</td><td>John Doe</td></tr>
+    <tr><td>🏪 Restaurant:</td><td>La Cocina</td></tr>
+    <tr><td>📍 Table:</td><td>Mesa 5</td></tr>
+    <tr><td>📅 Date:</td><td>Friday, March 15, 2026</td></tr>
+    <tr><td>🕐 Time:</td><td>19:00 hs</td></tr>
+    <tr><td>👥 Guests:</td><td>4</td></tr>
+  </table>
+</div>
+
+<!-- Footer -->
+<div style="background-color: #f5f5f5;">
+  <p>© 2026 Sistema de Reservas</p>
+</div>
+```
+
+Implementation reference: `source/lib/adaptadores/servicio_email.dart:401-436`
+
+## Reservation Metrics
+
+The admin panel provides analytics on reservation patterns:
+
+```dart
+final metricas = await cubit.obtenerMetricasReservas(negocioId);
+
+print('Total reservations: ${metricas['totalReservas']}');
+print('Reservations today: ${metricas['reservasHoy']}');
+print('This month: ${metricas['reservasMesActual']}');
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:342-445`
+
+### Available Metrics
+
+<Columns cols={2}>
+  <Card title="Daily Breakdown" icon="calendar-day">
+    Reservations per day for the last 7 days
+  </Card>
+  <Card title="Monthly Trends" icon="chart-line">
+    Reservations per month for the last 6 months
+  </Card>
+  <Card title="Peak Hours" icon="clock">
+    Top 3 busiest time slots
+  </Card>
+  <Card title="Slow Periods" icon="moon">
+    Top 3 least busy time slots
+  </Card>
+</Columns>
+
+### Peak Hours Analysis
+
+The system analyzes reservation patterns by hour:
+
+```dart
+// Group reservations by hour
+Map<int, int> reservasPorHora = {};
+for (var reserva in reservasActivas) {
+  final hora = reserva.fechaHora.hour;
+  reservasPorHora[hora] = (reservasPorHora[hora] ?? 0) + 1;
+}
+
+// Sort and get top 3
+final horariosOrdenados = reservasPorHora.entries.toList()
+  ..sort((a, b) => b.value.compareTo(a.value));
+
+final horariosPico = horariosOrdenados.take(3).map((e) => {
+  'hora': '${e.key.toString().padLeft(2, '0')}:00',
+  'reservas': e.value,
+}).toList();
+```
+
+Implementation reference: `source/lib/presentacion/pantalla_dueno/pantalla_dueno_cubit.dart:377-402`
+
+<Info>
+Metrics only include active reservations (pending and confirmed). Cancelled reservations are excluded from analytics.
+</Info>
+
+## Reservation Duration
+
+Each reservation has a duration that determines table availability:
+
+### Default Duration
+
+The default reservation duration is **60 minutes** (1 hour):
+
+```dart
+class Reserva {
+  final int duracionMinutos;
+  
+  Reserva({
+    this.duracionMinutos = 60,
+    // ...
+  });
+  
+  DateTime get horaFin => fechaHora.add(Duration(minutes: duracionMinutos));
+}
+```
+
+### Custom Durations
+
+Business owners can configure a custom default duration in [Business Configuration](/owners/business-configuration):
+
+```dart
+final negocio = negocio.copyWith(
+  duracionPromedioMinutos: 90, // 1.5 hours
+);
+```
+
+Common duration settings:
+- **45 minutes** - Quick service restaurants
+- **60 minutes** - Standard dining (default)
+- **90 minutes** - Fine dining
+- **120 minutes** - Multi-course meals
+
+## Reservation Conflicts
+
+The system prevents double-booking by checking for conflicts:
+
+### Conflict Detection
+
+A reservation conflicts with another if:
+
+1. Both reservations are for the **same table**
+2. Time periods **overlap**
+3. Neither reservation is **cancelled**
+
+```dart
+// Check if reservation A conflicts with reservation B
+bool hasConflict(Reserva a, Reserva b) {
+  if (a.mesaId != b.mesaId) return false;
+  if (a.estado == EstadoReserva.cancelada || 
+      b.estado == EstadoReserva.cancelada) return false;
+  
+  return a.fechaHora.isBefore(b.horaFin) && 
+         b.fechaHora.isBefore(a.horaFin);
+}
+```
+
+<Warning>
+**Overlapping Reservations**: The system automatically prevents creating reservations that would conflict with existing bookings.
+</Warning>
+
+## Advanced Reservation Management
+
+### Filtering by Date Range
+
+View reservations for a specific period:
+
+```dart
+final allReservations = await cubit.obtenerReservasDelNegocio(negocioId);
+
+final today = DateTime.now();
+final startOfDay = DateTime(today.year, today.month, today.day);
+final endOfDay = startOfDay.add(Duration(days: 1));
+
+final todayReservations = allReservations.where((r) => 
+  r.fechaHora.isAfter(startOfDay) && 
+  r.fechaHora.isBefore(endOfDay)
+).toList();
+```
+
+### Filtering by Status
+
+View only confirmed or pending reservations:
+
+```dart
+final confirmedReservations = allReservations.where((r) => 
+  r.estado == EstadoReserva.confirmada
+).toList();
+
+final pendingReservations = allReservations.where((r) => 
+  r.estado == EstadoReserva.pendiente
+).toList();
+```
+
+### Filtering by Table
+
+View reservations for a specific table:
+
+```dart
+final tableReservations = allReservations.where((r) => 
+  r.mesaId == specificTableId
+).toList();
+```
+
+## Firestore Integration
+
+Reservations are stored in Firestore with the following structure:
+
+```javascript
+reservas/
+  {reservaId}/
+    id: "reserva_abc123"
+    mesaId: "mesa_xyz789"
+    fechaHora: Timestamp(2026-03-15 19:00:00)
+    numeroPersonas: 4
+    duracionMinutos: 60
+    estado: "confirmada"
+    contactoCliente: "customer@email.com"
+    nombreCliente: "John Doe"
+    telefonoCliente: "+54 9 261 123-4567"
+    negocioId: "restaurant_xyz"
+```
+
+The `ReservaRepositorio` handles all database operations:
+
+- `crearReserva(Reserva reserva)` - Create new reservation
+- `actualizarReserva(Reserva reserva)` - Update existing reservation
+- `cancelarReserva(String reservaId)` - Cancel reservation
+- `obtenerReserva()` - Get all reservations
+- `obtenerReservaPorId(String id)` - Get specific reservation
+
+Implementation: `source/lib/adaptadores/adaptador_firestore_reserva.dart`
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Monitor Daily Reservations" icon="calendar-day">
+    Check your reservation schedule daily, especially during peak hours:
+    - Review morning reservations at start of day
+    - Check afternoon bookings before lunch service
+    - Verify evening reservations before dinner service
+  </Accordion>
+  
+  <Accordion title="Communicate Cancellations" icon="comment">
+    Always provide a clear reason when cancelling customer reservations:
+    - Be honest and specific
+    - Apologize for the inconvenience
+    - Offer to help rebook if possible
+  </Accordion>
+  
+  <Accordion title="Use Metrics for Planning" icon="chart-line">
+    Analyze reservation patterns to optimize operations:
+    - Staff appropriately during peak hours
+    - Offer promotions during slow periods
+    - Adjust table arrangements based on popular zones
+  </Accordion>
+  
+  <Accordion title="Maintain Customer Data" icon="user">
+    Keep customer contact information accurate:
+    - Verify email addresses are valid
+    - Encourage phone verification
+    - Update customer names when provided
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Problem: Email Not Sent
+
+**Possible causes:**
+- Customer email is missing or invalid
+- Firebase Email Extension not configured
+- Email quota exceeded
+
+**Solution:** Verify customer has valid email in `contactoCliente` field and check Firebase console for email extension status
+
+### Problem: Cannot Cancel Reservation
+
+**Possible causes:**
+- Reservation already cancelled
+- Database connection issue
+- Insufficient permissions
+
+**Solution:** Check reservation status before attempting cancellation
+
+### Problem: Metrics Not Updating
+
+**Possible causes:**
+- Reservations not associated with restaurant tables
+- Date filter excluding recent reservations
+
+**Solution:** Ensure all tables have correct `negocioId` and reservations have valid `mesaId`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Business Configuration" icon="gear" href="/owners/business-configuration">
+    Configure reservation duration and cancellation policies
+  </Card>
+  <Card title="Table Management" icon="table-columns" href="/owners/table-management">
+    Manage your restaurant's table layout
+  </Card>
+  <Card title="Email Notifications" icon="envelope" href="/owners/notifications">
+    Learn about the email notification system
+  </Card>
+</CardGroup>

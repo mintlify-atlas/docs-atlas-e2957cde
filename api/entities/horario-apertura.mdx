@@ -1,0 +1,380 @@
+---
+title: 'HorarioApertura'
+description: 'Entity representing restaurant opening hours'
+icon: 'clock'
+---
+
+## Overview
+
+The `HorarioApertura` system consists of three related classes that manage restaurant opening hours:
+- `IntervaloHorario` - Represents a time interval (e.g., lunch or dinner service)
+- `HorarioDia` - Represents the schedule for a specific day of the week
+- `HorarioApertura` - Represents the complete weekly schedule for a restaurant
+
+## IntervaloHorario
+
+Represents a continuous time interval within a day.
+
+### Class Definition
+
+```dart
+class IntervaloHorario {
+  final int horaInicio;    // 0-23
+  final int minutoInicio;  // 0-59
+  final int horaFin;       // 0-23
+  final int minutoFin;     // 0-59
+}
+```
+
+### Properties
+
+<ParamField path="horaInicio" type="int" required>
+  Starting hour (0-23)
+</ParamField>
+
+<ParamField path="minutoInicio" type="int" required>
+  Starting minute (0-59)
+</ParamField>
+
+<ParamField path="horaFin" type="int" required>
+  Ending hour (0-23)
+</ParamField>
+
+<ParamField path="minutoFin" type="int" required>
+  Ending minute (0-59)
+</ParamField>
+
+### Methods
+
+#### contieneHora()
+
+Checks if a specific time falls within this interval.
+
+```dart
+bool contieneHora(int hora, int minuto)
+```
+
+**Parameters:**
+- `hora` (int) - Hour to check (0-23)
+- `minuto` (int) - Minute to check (0-59)
+
+**Returns:** `bool` - `true` if the time is within the interval
+
+**Note:** Supports intervals that cross midnight (e.g., 23:00 - 02:00)
+
+#### toString()
+
+Returns a formatted string representation of the interval.
+
+```dart
+String toString()
+```
+
+**Returns:** String in format "HH:MM - HH:MM"
+
+**Example:**
+```dart
+final almuerzo = IntervaloHorario(
+  horaInicio: 12,
+  minutoInicio: 0,
+  horaFin: 16,
+  minutoFin: 0,
+);
+
+print(almuerzo.toString()); // "12:00 - 16:00"
+print(almuerzo.contieneHora(14, 30)); // true
+print(almuerzo.contieneHora(17, 0));  // false
+```
+
+## HorarioDia
+
+Represents the schedule for a specific day of the week.
+
+### Class Definition
+
+```dart
+class HorarioDia {
+  final String nombreDia;                  // Lunes, Martes, etc.
+  final bool cerrado;
+  final List<IntervaloHorario> intervalos; // Multiple intervals (e.g., lunch & dinner)
+}
+```
+
+### Properties
+
+<ParamField path="nombreDia" type="String" required>
+  Name of the day (e.g., "Lunes", "Martes", "Miércoles")
+</ParamField>
+
+<ParamField path="cerrado" type="bool" default="false">
+  Whether the restaurant is closed on this day
+</ParamField>
+
+<ParamField path="intervalos" type="List<IntervaloHorario>" default="[]">
+  List of time intervals for the day (supports multiple shifts)
+</ParamField>
+
+### Constructor
+
+```dart
+HorarioDia({
+  required this.nombreDia,
+  this.cerrado = false,
+  this.intervalos = const [],
+})
+```
+
+### Methods
+
+#### estaAbierto()
+
+Checks if the restaurant is open at a specific time on this day.
+
+```dart
+bool estaAbierto(int hora, int minuto)
+```
+
+**Parameters:**
+- `hora` (int) - Hour to check (0-23)
+- `minuto` (int) - Minute to check (0-59)
+
+**Returns:** `bool` - `true` if open at the specified time
+
+#### toString()
+
+Returns a formatted string representation of the day's schedule.
+
+**Example:**
+```dart
+final lunes = HorarioDia(
+  nombreDia: 'Lunes',
+  intervalos: [
+    IntervaloHorario(
+      horaInicio: 12,
+      minutoInicio: 0,
+      horaFin: 16,
+      minutoFin: 0,
+    ),
+    IntervaloHorario(
+      horaInicio: 20,
+      minutoInicio: 0,
+      horaFin: 23,
+      minutoFin: 30,
+    ),
+  ],
+);
+
+print(lunes.toString()); 
+// "Lunes: 12:00 - 16:00 / 20:00 - 23:30"
+
+print(lunes.estaAbierto(14, 0));  // true (lunch time)
+print(lunes.estaAbierto(18, 0));  // false (between shifts)
+print(lunes.estaAbierto(21, 30)); // true (dinner time)
+```
+
+## HorarioApertura
+
+Represents the complete weekly schedule for a restaurant.
+
+### Class Definition
+
+```dart
+class HorarioApertura {
+  final String negocioId;
+  final List<HorarioDia> horariosSemanal;
+}
+```
+
+### Properties
+
+<ParamField path="negocioId" type="String" required>
+  Identifier of the restaurant
+</ParamField>
+
+<ParamField path="horariosSemanal" type="List<HorarioDia>" required>
+  List of schedules for each day of the week
+</ParamField>
+
+### Constructor
+
+```dart
+HorarioApertura({
+  required this.negocioId,
+  required this.horariosSemanal,
+})
+```
+
+### Methods
+
+#### estaAbiertoEn()
+
+Checks if the restaurant is open at a specific date and time.
+
+```dart
+bool estaAbiertoEn(DateTime fecha)
+```
+
+**Parameters:**
+- `fecha` (DateTime) - The date and time to check
+
+**Returns:** `bool` - `true` if the restaurant is open at that time
+
+**Note:** Uses `DateTime.weekday` where 1 = Monday, 7 = Sunday
+
+#### obtenerMensajeError()
+
+Returns a descriptive error message when the restaurant is closed.
+
+```dart
+String obtenerMensajeError(DateTime fecha)
+```
+
+**Parameters:**
+- `fecha` (DateTime) - The date and time to check
+
+**Returns:** String with details about why the restaurant is closed
+
+## Usage Examples
+
+### Creating a Complete Weekly Schedule
+
+```dart
+final horario = HorarioApertura(
+  negocioId: 'rest-001',
+  horariosSemanal: [
+    // Monday - Friday: Lunch and Dinner
+    HorarioDia(
+      nombreDia: 'Lunes',
+      intervalos: [
+        IntervaloHorario(
+          horaInicio: 12,
+          minutoInicio: 0,
+          horaFin: 16,
+          minutoFin: 0,
+        ),
+        IntervaloHorario(
+          horaInicio: 20,
+          minutoInicio: 0,
+          horaFin: 23,
+          minutoFin: 30,
+        ),
+      ],
+    ),
+    // ... (repeat for Martes through Viernes)
+    
+    // Saturday: Extended hours
+    HorarioDia(
+      nombreDia: 'Sábado',
+      intervalos: [
+        IntervaloHorario(
+          horaInicio: 12,
+          minutoInicio: 0,
+          horaFin: 1,
+          minutoFin: 0,
+        ),
+      ],
+    ),
+    
+    // Sunday: Closed
+    HorarioDia(
+      nombreDia: 'Domingo',
+      cerrado: true,
+    ),
+  ],
+);
+```
+
+### Checking Availability
+
+```dart
+final fechaReserva = DateTime(2026, 3, 15, 21, 0); // Saturday at 9 PM
+
+if (horario.estaAbiertoEn(fechaReserva)) {
+  print('Reserva disponible');
+} else {
+  print(horario.obtenerMensajeError(fechaReserva));
+}
+```
+
+### Creating a 24-Hour Restaurant
+
+```dart
+final horario24h = HorarioApertura(
+  negocioId: 'rest-002',
+  horariosSemanal: [
+    for (var dia in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'])
+      HorarioDia(
+        nombreDia: dia,
+        intervalos: [
+          IntervaloHorario(
+            horaInicio: 0,
+            minutoInicio: 0,
+            horaFin: 23,
+            minutoFin: 59,
+          ),
+        ],
+      ),
+  ],
+);
+```
+
+### Handling Midnight Crossover
+
+```dart
+// Restaurant open from 11 PM to 2 AM
+final horarioNocturno = HorarioDia(
+  nombreDia: 'Viernes',
+  intervalos: [
+    IntervaloHorario(
+      horaInicio: 23,
+      minutoInicio: 0,
+      horaFin: 2,
+      minutoFin: 0,
+    ),
+  ],
+);
+
+print(horarioNocturno.estaAbierto(23, 30)); // true
+print(horarioNocturno.estaAbierto(1, 0));   // true
+print(horarioNocturno.estaAbierto(3, 0));   // false
+```
+
+### Validating Reservation Times
+
+```dart
+final horario = HorarioApertura(
+  negocioId: 'rest-001',
+  horariosSemanal: [...],
+);
+
+void validarReserva(DateTime fechaReserva) {
+  if (!horario.estaAbiertoEn(fechaReserva)) {
+    throw Exception(horario.obtenerMensajeError(fechaReserva));
+  }
+  
+  print('Horario válido para la reserva');
+}
+
+try {
+  validarReserva(DateTime(2026, 3, 16, 15, 0)); // Sunday at 3 PM
+} catch (e) {
+  print(e); 
+  // "El restaurante está cerrado los Domingos."
+}
+```
+
+## Day Name Mapping
+
+The system supports day names in Spanish with the following mapping:
+
+| Spanish    | Weekday Number |
+|------------|----------------|
+| Lunes      | 1 (Monday)     |
+| Martes     | 2 (Tuesday)    |
+| Miércoles  | 3 (Wednesday)  |
+| Jueves     | 4 (Thursday)   |
+| Viernes    | 5 (Friday)     |
+| Sábado     | 6 (Saturday)   |
+| Domingo    | 7 (Sunday)     |
+
+**Note:** Accent-insensitive matching is supported (e.g., both "Miércoles" and "Miercoles" work).

@@ -1,0 +1,598 @@
+---
+title: "Servicio Autenticación Firebase"
+description: "Servicio completo de autenticación con Firebase, incluyendo email/password, Google Sign-In, verificación de email, recuperación de contraseña y verificación de teléfono."
+---
+
+## Descripción General
+
+`ServicioAutenticacion` es el servicio centralizado para manejar toda la autenticación en el sistema. Integra Firebase Authentication con soporte para múltiples métodos de autenticación y verificación.
+
+**Ubicación**: `lib/adaptadores/servicio_autenticacion_firebase.dart`
+
+## Características Principales
+
+- Registro e inicio de sesión con email/password
+- Autenticación con Google (web y móvil)
+- Verificación de email automática
+- Recuperación de contraseña
+- Cambio de email y contraseña
+- Verificación de teléfono por SMS
+- Manejo de errores traducidos al español
+
+---
+
+## Propiedades
+
+### Estado de Autenticación
+
+```dart
+Stream<User?> get authStateChanges
+```
+Stream que emite cambios en el estado de autenticación del usuario.
+
+```dart
+User? get usuarioActual
+```
+Usuario actualmente autenticado (null si no hay sesión).
+
+```dart
+bool get estaAutenticado
+```
+Retorna `true` si hay un usuario autenticado.
+
+```dart
+bool get emailVerificado
+```
+Retorna `true` si el email del usuario está verificado.
+
+```dart
+bool get esLoginGoogle
+```
+Verifica si el usuario inició sesión con Google.
+
+```dart
+bool get telefonoVerificado
+```
+Retorna `true` si el usuario tiene un teléfono verificado.
+
+```dart
+String? get telefonoVerificadoNumero
+```
+Retorna el número de teléfono verificado o null.
+
+---
+
+## Métodos de Registro y Login
+
+### registrarConEmail
+
+```dart
+Future<UserCredential?> registrarConEmail({
+  required String email,
+  required String password,
+  String? urlRedireccion,
+})
+```
+
+Registra un nuevo usuario con email y contraseña. Envía automáticamente un email de verificación.
+
+**Parámetros**:
+- `email` - Correo electrónico del usuario
+- `password` - Contraseña (mínimo 6 caracteres)
+- `urlRedireccion` - URL opcional para redirección después de verificar email
+
+**Excepciones**:
+- `email-already-in-use` - El correo ya está registrado
+- `weak-password` - Contraseña muy débil
+- `invalid-email` - Formato de email inválido
+
+**Ejemplo**:
+```dart
+try {
+  final userCredential = await servicioAuth.registrarConEmail(
+    email: 'usuario@ejemplo.com',
+    password: 'password123',
+    urlRedireccion: 'https://miapp.com/verificado',
+  );
+  
+  print('Usuario registrado: ${userCredential?.user?.uid}');
+  print('Email de verificación enviado');
+} catch (e) {
+  print('Error al registrar: $e');
+}
+```
+
+### iniciarSesionConEmail
+
+```dart
+Future<UserCredential?> iniciarSesionConEmail({
+  required String email,
+  required String password,
+})
+```
+
+Inicia sesión con email y contraseña.
+
+**Excepciones**:
+- `user-not-found` - No existe cuenta con ese email
+- `wrong-password` - Contraseña incorrecta
+- `too-many-requests` - Demasiados intentos fallidos
+
+**Ejemplo**:
+```dart
+try {
+  final userCredential = await servicioAuth.iniciarSesionConEmail(
+    email: 'usuario@ejemplo.com',
+    password: 'password123',
+  );
+  
+  if (userCredential != null) {
+    print('Sesión iniciada correctamente');
+  }
+} catch (e) {
+  print('Error al iniciar sesión: $e');
+}
+```
+
+### iniciarSesionConGoogle
+
+```dart
+Future<UserCredential?> iniciarSesionConGoogle()
+```
+
+Inicia sesión con Google. Maneja automáticamente las diferencias entre web (popup) y móvil (google_sign_in).
+
+**Comportamiento**:
+- **Web**: Usa `signInWithPopup` con selector de cuentas forzado
+- **Móvil**: Usa el paquete `google_sign_in`
+
+**Ejemplo**:
+```dart
+try {
+  final userCredential = await servicioAuth.iniciarSesionConGoogle();
+  
+  if (userCredential != null) {
+    final user = userCredential.user;
+    print('Bienvenido ${user?.displayName}');
+    print('Email: ${user?.email}');
+  } else {
+    print('El usuario canceló el inicio de sesión');
+  }
+} catch (e) {
+  print('Error con Google Sign-In: $e');
+}
+```
+
+### cerrarSesion
+
+```dart
+Future<void> cerrarSesion()
+```
+
+Cierra la sesión del usuario actual. También cierra sesión de Google Sign-In en móvil.
+
+**Ejemplo**:
+```dart
+await servicioAuth.cerrarSesion();
+print('Sesión cerrada');
+```
+
+---
+
+## Verificación de Email
+
+### enviarEmailVerificacion
+
+```dart
+Future<void> enviarEmailVerificacion({String? urlRedireccion})
+```
+
+Envía un email de verificación al usuario actual.
+
+**Parámetros**:
+- `urlRedireccion` - URL a la que se redirige después de verificar (default: URL de Firebase)
+
+**Ejemplo**:
+```dart
+try {
+  await servicioAuth.enviarEmailVerificacion(
+    urlRedireccion: 'https://miapp.com/verificado',
+  );
+  print('Email de verificación enviado');
+} catch (e) {
+  print('Error al enviar email: $e');
+}
+```
+
+### recargarUsuario
+
+```dart
+Future<bool> recargarUsuario()
+```
+
+Recarga el usuario actual desde Firebase para actualizar el estado de verificación.
+
+**Retorna**: `true` si el email está verificado
+
+**Ejemplo**:
+```dart
+// Después de que el usuario verificó su email
+final verificado = await servicioAuth.recargarUsuario();
+if (verificado) {
+  print('Email verificado exitosamente');
+}
+```
+
+---
+
+## Recuperación de Contraseña
+
+### enviarEmailRecuperacion
+
+```dart
+Future<void> enviarEmailRecuperacion({
+  required String email,
+  String? urlRedireccion,
+})
+```
+
+Envía un email para restablecer la contraseña.
+
+**Ejemplo**:
+```dart
+try {
+  await servicioAuth.enviarEmailRecuperacion(
+    email: 'usuario@ejemplo.com',
+    urlRedireccion: 'https://miapp.com/reset-password',
+  );
+  print('Email de recuperación enviado');
+} catch (e) {
+  print('Error: $e');
+}
+```
+
+---
+
+## Cambio de Email y Contraseña
+
+### cambiarEmail
+
+```dart
+Future<void> cambiarEmail({
+  required String nuevoEmail,
+  required String passwordActual,
+})
+```
+
+Cambia el email del usuario. Requiere reautenticación por seguridad.
+
+**Proceso**:
+1. Reautentica al usuario con su contraseña actual
+2. Envía email de verificación al nuevo correo
+3. El usuario debe verificar el nuevo email
+
+**Ejemplo**:
+```dart
+try {
+  await servicioAuth.cambiarEmail(
+    nuevoEmail: 'nuevo@ejemplo.com',
+    passwordActual: 'password123',
+  );
+  print('Email de verificación enviado al nuevo correo');
+} catch (e) {
+  print('Error al cambiar email: $e');
+}
+```
+
+### cambiarPassword
+
+```dart
+Future<void> cambiarPassword({
+  required String passwordActual,
+  required String passwordNueva,
+})
+```
+
+Cambia la contraseña del usuario. Requiere reautenticación.
+
+**Ejemplo**:
+```dart
+try {
+  await servicioAuth.cambiarPassword(
+    passwordActual: 'password123',
+    passwordNueva: 'nuevaPassword456',
+  );
+  print('Contraseña actualizada');
+} catch (e) {
+  if (e.toString().contains('wrong-password')) {
+    print('La contraseña actual es incorrecta');
+  }
+}
+```
+
+---
+
+## Verificación de Teléfono
+
+### enviarCodigoSMS
+
+```dart
+Future<bool> enviarCodigoSMS({
+  required String numeroTelefono,
+  required Function(String) onCodeSent,
+  required Function(String) onError,
+  required Function() onAutoVerified,
+})
+```
+
+Envía un código de verificación por SMS al número de teléfono. Soporta formato argentino.
+
+**Parámetros**:
+- `numeroTelefono` - Número en formato local o E.164
+- `onCodeSent` - Callback cuando el código se envía
+- `onError` - Callback en caso de error
+- `onAutoVerified` - Callback si se verifica automáticamente (Android)
+
+**Formato de Teléfono**:
+- Formatos aceptados: `11 1234-5678`, `011 15-1234-5678`, `+5491112345678`
+- Se normaliza automáticamente a formato E.164
+
+**Ejemplo**:
+```dart
+await servicioAuth.enviarCodigoSMS(
+  numeroTelefono: '11 1234-5678',
+  onCodeSent: (mensaje) {
+    print(mensaje); // "Código enviado por SMS"
+    // Mostrar campo para ingresar código
+  },
+  onError: (error) {
+    print('Error: $error');
+  },
+  onAutoVerified: () {
+    print('Verificación automática exitosa (Android)');
+  },
+);
+```
+
+### verificarCodigoSMS
+
+```dart
+Future<void> verificarCodigoSMS({required String codigo})
+```
+
+Verifica el código SMS ingresado por el usuario y vincula el teléfono a la cuenta.
+
+**Parámetros**:
+- `codigo` - Código de 6 dígitos recibido por SMS
+
+**Excepciones**:
+- `invalid-verification-code` - Código incorrecto
+- `session-expired` - La verificación expiró
+- `credential-already-in-use` - El número ya está vinculado a otra cuenta
+
+**Ejemplo**:
+```dart
+try {
+  await servicioAuth.verificarCodigoSMS(codigo: '123456');
+  print('Teléfono verificado exitosamente');
+  print('Número: ${servicioAuth.telefonoVerificadoNumero}');
+} catch (e) {
+  print('Error al verificar código: $e');
+}
+```
+
+### desvincularTelefono
+
+```dart
+Future<void> desvincularTelefono()
+```
+
+Remueve el teléfono verificado de la cuenta del usuario.
+
+### validarTelefonoArgentino
+
+```dart
+Map<String, dynamic> validarTelefonoArgentino(String telefono)
+```
+
+Valida y formatea un número de teléfono argentino.
+
+**Retorna**:
+```dart
+{
+  'valido': true/false,
+  'formateado': '+5491112345678',  // formato E.164
+  'nacional': '011 15-1234-5678',   // formato de visualización
+  'error': 'mensaje de error'       // si valido = false
+}
+```
+
+**Ejemplo**:
+```dart
+final resultado = servicioAuth.validarTelefonoArgentino('11 1234-5678');
+
+if (resultado['valido']) {
+  print('Formato E.164: ${resultado["formateado"]}');
+  print('Formato nacional: ${resultado["nacional"]}');
+} else {
+  print('Error: ${resultado["error"]}');
+}
+```
+
+---
+
+## Información del Usuario
+
+### obtenerInfoUsuario
+
+```dart
+Map<String, dynamic>? obtenerInfoUsuario()
+```
+
+Retorna la información completa del usuario actual.
+
+**Retorna**:
+```dart
+{
+  'uid': 'firebase-uid',
+  'email': 'usuario@ejemplo.com',
+  'nombre': 'Nombre Usuario',
+  'foto': 'https://...',
+  'emailVerificado': true/false,
+  'esGoogle': true/false,
+}
+```
+
+**Ejemplo**:
+```dart
+final info = servicioAuth.obtenerInfoUsuario();
+if (info != null) {
+  print('Usuario: ${info["nombre"]}');
+  print('Email: ${info["email"]}');
+  print('Verificado: ${info["emailVerificado"]}');
+  print('Login Google: ${info["esGoogle"]}');
+}
+```
+
+---
+
+## Manejo de Errores
+
+El servicio traduce automáticamente los códigos de error de Firebase a mensajes en español:
+
+| Código Firebase | Mensaje en Español |
+|----------------|--------------------|
+| `email-already-in-use` | Este correo ya está registrado |
+| `weak-password` | La contraseña debe tener al menos 6 caracteres |
+| `invalid-email` | El correo electrónico no es válido |
+| `user-not-found` | No existe una cuenta con este correo |
+| `wrong-password` | Contraseña incorrecta |
+| `requires-recent-login` | Por seguridad, inicia sesión nuevamente |
+| `too-many-requests` | Demasiados intentos. Intenta más tarde |
+| `user-disabled` | Esta cuenta ha sido deshabilitada |
+| `invalid-credential` | Credenciales inválidas |
+
+**Ejemplo de manejo**:
+```dart
+try {
+  await servicioAuth.iniciarSesionConEmail(
+    email: email,
+    password: password,
+  );
+} catch (e) {
+  // Los errores ya vienen traducidos
+  mostrarMensajeError(e.toString());
+}
+```
+
+---
+
+## Flujo de Uso Típico
+
+### Registro de Usuario
+
+```dart
+// 1. Registrar
+final userCredential = await servicioAuth.registrarConEmail(
+  email: email,
+  password: password,
+);
+
+// 2. Usuario registrado, email de verificación enviado automáticamente
+print('Revisa tu email para verificar tu cuenta');
+
+// 3. Esperar a que el usuario verifique su email
+// 4. Recargar para actualizar estado
+final verificado = await servicioAuth.recargarUsuario();
+
+if (verificado) {
+  // Continuar con el flujo de la app
+} else {
+  // Mostrar pantalla de verificación pendiente
+}
+```
+
+### Login con Google
+
+```dart
+final userCredential = await servicioAuth.iniciarSesionConGoogle();
+
+if (userCredential != null) {
+  final user = userCredential.user;
+  // El email de Google ya está verificado automáticamente
+  if (servicioAuth.emailVerificado) {
+    // Redirigir a la pantalla principal
+  }
+}
+```
+
+### Verificación de Teléfono
+
+```dart
+// 1. Enviar código SMS
+await servicioAuth.enviarCodigoSMS(
+  numeroTelefono: telefono,
+  onCodeSent: (_) {
+    setState(() => mostrarCampoCodigoSMS = true);
+  },
+  onError: (error) {
+    mostrarError(error);
+  },
+  onAutoVerified: () {
+    // En Android puede verificarse automáticamente
+    print('Verificado automáticamente');
+  },
+);
+
+// 2. Usuario ingresa el código
+// 3. Verificar código
+await servicioAuth.verificarCodigoSMS(codigo: codigoIngresado);
+
+// 4. Teléfono verificado
+print('Teléfono: ${servicioAuth.telefonoVerificadoNumero}');
+```
+
+---
+
+## Integración con Firebase
+
+### Configuración Requerida
+
+1. **Firebase Authentication** habilitado en la consola
+2. **Proveedores activos**:
+   - Email/Password
+   - Google Sign-In
+   - Phone (SMS)
+
+3. **Para SMS** (verificación de teléfono):
+   - Configurar método de facturación en Firebase
+   - Habilitar Phone Authentication
+   - En producción: Configurar App Verification para iOS
+
+### Dependencias
+
+```yaml
+dependencies:
+  firebase_auth: ^latest
+  google_sign_in: ^latest
+  cloud_firestore: ^latest
+```
+
+---
+
+## Consideraciones de Seguridad
+
+<Warning>
+  Las operaciones sensibles como `cambiarEmail` y `cambiarPassword` requieren **reautenticación reciente** del usuario. Si el usuario ha estado autenticado por mucho tiempo, Firebase puede lanzar error `requires-recent-login`.
+</Warning>
+
+<Tip>
+  Para operaciones críticas, solicita al usuario que vuelva a ingresar su contraseña antes de intentar el cambio.
+</Tip>
+
+---
+
+## Ver También
+
+- [Servicio Email](/api/services/email) - Para enviar notificaciones por correo
+- [Servicio Verificación Cliente](/api/services/verificacion-cliente) - Para verificación sin login permanente

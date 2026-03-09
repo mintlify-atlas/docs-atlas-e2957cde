@@ -1,0 +1,432 @@
+---
+title: HistoriaRepositorio
+description: Repository interface and Firestore implementation for managing restaurant story content
+---
+
+## Overview
+
+The `HistoriaRepositorio` defines the contract for managing restaurant story content, including the restaurant's history, specialties, and signature dishes. The Firestore implementation (`HistoriaRepositorioFirestore`) provides persistent storage with safe icon serialization.
+
+## Interface
+
+```dart lib/dominio/repositorios/historia_repositorio.dart
+abstract class HistoriaRepositorio {
+  Future<HistoriaRestaurante?> obtenerHistoria(String negocioId);
+  Future<bool> guardarHistoria(String negocioId, HistoriaRestaurante historia);
+}
+```
+
+## Methods
+
+### obtenerHistoria
+
+Retrieves the story content for a specific restaurant.
+
+<ParamField path="negocioId" type="String" required>
+  The unique identifier of the restaurant.
+</ParamField>
+
+<ResponseField name="Future<HistoriaRestaurante?>" type="HistoriaRestaurante?">
+  Returns the restaurant's story entity if found, or `null` if no story has been configured.
+</ResponseField>
+
+```dart Example Usage
+final historia = await repositorio.obtenerHistoria('negocio_abc');
+if (historia != null) {
+  print('Título: ${historia.titulo}');
+  print('Subtítulo: ${historia.subtitulo}');
+  print('Historia en ${historia.parrafosHistoria.length} párrafos');
+  print('${historia.especialidades.length} especialidades');
+} else {
+  print('Este restaurante no tiene historia configurada');
+}
+```
+
+---
+
+### guardarHistoria
+
+Saves or updates the story content for a restaurant.
+
+<ParamField path="negocioId" type="String" required>
+  The unique identifier of the restaurant.
+</ParamField>
+
+<ParamField path="historia" type="HistoriaRestaurante" required>
+  The complete story content to save.
+</ParamField>
+
+<ResponseField name="Future<bool>" type="bool">
+  Returns `true` if the save was successful, `false` otherwise.
+</ResponseField>
+
+**Behavior:**
+- Uses the `negocioId` as the document ID in Firestore
+- Overwrites the entire document if it already exists
+- Creates a new document if no story exists yet
+
+```dart Example Usage
+import 'package:flutter/material.dart';
+
+final historia = HistoriaRestaurante(
+  titulo: 'Nuestra Historia',
+  subtitulo: 'Tres generaciones de tradición culinaria',
+  parrafosHistoria: [
+    'Fundado en 1950 por la familia García, La Terraza del Mar nació como un pequeño chiringuito en la costa mediterránea.',
+    'Con el paso de los años, nos hemos convertido en un referente de la cocina de autor, manteniendo siempre las recetas tradicionales de nuestra abuela.',
+    'Hoy, la tercera generación continúa el legado, combinando técnicas modernas con los sabores auténticos que nos caracterizan.',
+  ],
+  especialidades: [
+    EspecialidadItem(
+      nombre: 'Paella Valenciana',
+      descripcion: 'Receta tradicional con mariscos frescos del día',
+      icono: Icons.rice_bowl,
+    ),
+    EspecialidadItem(
+      nombre: 'Pescado a la Sal',
+      descripcion: 'Dorada fresca cocinada en costra de sal marina',
+      icono: Icons.set_meal,
+    ),
+    EspecialidadItem(
+      nombre: 'Fideuá',
+      descripcion: 'Nuestra versión con langostinos y sepia',
+      icono: Icons.dining,
+    ),
+  ],
+);
+
+final exitoso = await repositorio.guardarHistoria('negocio_abc', historia);
+if (exitoso) {
+  print('Historia guardada correctamente');
+}
+```
+
+---
+
+## Firestore Implementation
+
+### Collection Structure
+
+Restaurant stories are stored in the `historias` collection, using the `negocioId` as the document ID:
+
+```json Firestore Document (historias/negocio_abc)
+{
+  "titulo": "Nuestra Historia",
+  "subtitulo": "Tres generaciones de tradición culinaria",
+  "parrafosHistoria": [
+    "Fundado en 1950 por la familia García...",
+    "Con el paso de los años, nos hemos convertido...",
+    "Hoy, la tercera generación continúa el legado..."
+  ],
+  "especialidades": [
+    {
+      "nombre": "Paella Valenciana",
+      "descripcion": "Receta tradicional con mariscos frescos del día",
+      "iconoCode": 59476,
+      "iconoFontFamily": "MaterialIcons",
+      "iconoFontPackage": null
+    },
+    {
+      "nombre": "Pescado a la Sal",
+      "descripcion": "Dorada fresca cocinada en costra de sal marina",
+      "iconoCode": 59481,
+      "iconoFontFamily": "MaterialIcons",
+      "iconoFontPackage": null
+    }
+  ]
+}
+```
+
+### Icon Serialization
+
+Flutter `IconData` objects are serialized to Firestore as three separate fields:
+
+```dart Icon Mapping
+IconData icon = Icons.restaurant;
+
+// Serialized to Firestore:
+{
+  "iconoCode": 59698,           // icon.codePoint
+  "iconoFontFamily": "MaterialIcons",  // icon.fontFamily
+  "iconoFontPackage": null      // icon.fontPackage
+}
+```
+
+When deserializing, the implementation:
+1. Reads the `iconoCode` field
+2. Looks up the icon in an **allowed icons whitelist**
+3. Returns `Icons.restaurant` as a safe fallback if the code is not found
+
+### Allowed Icons Whitelist
+
+To prevent tree-shaking issues in Flutter Web release builds, only the following Material Icons are allowed:
+
+```dart
+const allowedIcons = [
+  Icons.restaurant,
+  Icons.restaurant_menu,
+  Icons.rice_bowl,
+  Icons.set_meal,
+  Icons.dining,
+  Icons.local_cafe,
+  Icons.local_pizza,
+  Icons.local_bar,
+  Icons.fastfood,
+  Icons.cake,
+  Icons.icecream,
+  Icons.local_dining,
+  Icons.lunch_dining,
+  Icons.brunch_dining,
+  Icons.breakfast_dining,
+  Icons.dinner_dining,
+  Icons.bakery_dining,
+  Icons.ramen_dining,
+  Icons.kebab_dining,
+  Icons.tapas,
+  Icons.soup_kitchen,
+];
+```
+
+<Info>
+This whitelist ensures that Flutter's tree-shaker doesn't remove icon font data during release builds, preventing "non-constant invocations of IconData" errors in production.
+</Info>
+
+---
+
+## Related Types
+
+### HistoriaRestaurante Entity
+
+```dart
+class HistoriaRestaurante {
+  final String titulo;
+  final String subtitulo;
+  final List<String> parrafosHistoria;
+  final List<EspecialidadItem> especialidades;
+}
+```
+
+### EspecialidadItem Entity
+
+```dart
+class EspecialidadItem {
+  final String nombre;
+  final String descripcion;
+  final IconData icono; // Flutter Material Icon
+}
+```
+
+---
+
+## Use Cases
+
+### Displaying Restaurant Story on Website
+
+```dart
+final historia = await historiaRepo.obtenerHistoria('negocio_abc');
+
+if (historia != null) {
+  // Display hero section
+  Text(historia.titulo, style: Theme.of(context).textTheme.headline1);
+  Text(historia.subtitulo, style: Theme.of(context).textTheme.subtitle1);
+  
+  // Display story paragraphs
+  for (final parrafo in historia.parrafosHistoria) {
+    Text(parrafo, style: Theme.of(context).textTheme.bodyText1);
+  }
+  
+  // Display specialties grid
+  GridView.builder(
+    itemCount: historia.especialidades.length,
+    itemBuilder: (context, index) {
+      final especialidad = historia.especialidades[index];
+      return Card(
+        child: Column(
+          children: [
+            Icon(especialidad.icono, size: 48),
+            Text(especialidad.nombre),
+            Text(especialidad.descripcion),
+          ],
+        ),
+      );
+    },
+  );
+}
+```
+
+### Admin Story Editor
+
+```dart
+import 'package:flutter/material.dart';
+
+class HistoriaEditor extends StatefulWidget {
+  final String negocioId;
+  
+  @override
+  _HistoriaEditorState createState() => _HistoriaEditorState();
+}
+
+class _HistoriaEditorState extends State<HistoriaEditor> {
+  final _tituloController = TextEditingController();
+  final _subtituloController = TextEditingController();
+  List<String> _parrafos = [];
+  List<EspecialidadItem> _especialidades = [];
+  
+  @override
+  void initState() {
+    super.initState();
+    _cargarHistoria();
+  }
+  
+  Future<void> _cargarHistoria() async {
+    final historia = await historiaRepo.obtenerHistoria(widget.negocioId);
+    if (historia != null) {
+      setState(() {
+        _tituloController.text = historia.titulo;
+        _subtituloController.text = historia.subtitulo;
+        _parrafos = List.from(historia.parrafosHistoria);
+        _especialidades = List.from(historia.especialidades);
+      });
+    }
+  }
+  
+  Future<void> _guardarHistoria() async {
+    final historia = HistoriaRestaurante(
+      titulo: _tituloController.text,
+      subtitulo: _subtituloController.text,
+      parrafosHistoria: _parrafos,
+      especialidades: _especialidades,
+    );
+    
+    final exitoso = await historiaRepo.guardarHistoria(
+      widget.negocioId,
+      historia,
+    );
+    
+    if (exitoso) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Historia guardada correctamente')),
+      );
+    }
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Editar Historia')),
+      body: ListView(
+        padding: EdgeInsets.all(16),
+        children: [
+          TextField(
+            controller: _tituloController,
+            decoration: InputDecoration(labelText: 'Título'),
+          ),
+          TextField(
+            controller: _subtituloController,
+            decoration: InputDecoration(labelText: 'Subtítulo'),
+          ),
+          // ... add paragraph editors ...
+          // ... add specialty editors ...
+          ElevatedButton(
+            onPressed: _guardarHistoria,
+            child: Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+### Generating SEO Meta Tags
+
+```dart
+final historia = await historiaRepo.obtenerHistoria('negocio_abc');
+
+if (historia != null) {
+  // Generate meta description from first paragraph
+  final metaDescription = historia.parrafosHistoria.isNotEmpty
+      ? historia.parrafosHistoria.first.substring(0, 160)
+      : '';
+  
+  // Add to HTML head
+  // <meta name="description" content="$metaDescription">
+  // <meta property="og:title" content="${historia.titulo}">
+  // <meta property="og:description" content="$metaDescription">
+}
+```
+
+---
+
+## Best Practices
+
+### Icon Selection
+
+When allowing users to select icons for specialties, restrict choices to the allowed whitelist:
+
+```dart
+final iconosDisponibles = [
+  Icons.restaurant,
+  Icons.rice_bowl,
+  Icons.set_meal,
+  Icons.local_pizza,
+  Icons.cake,
+  // ... more from whitelist
+];
+
+// In icon picker UI
+GridView.builder(
+  itemCount: iconosDisponibles.length,
+  itemBuilder: (context, index) {
+    return IconButton(
+      icon: Icon(iconosDisponibles[index]),
+      onPressed: () {
+        setState(() {
+          selectedIcon = iconosDisponibles[index];
+        });
+      },
+    );
+  },
+);
+```
+
+### Content Validation
+
+```dart
+Future<bool> guardarHistoriaConValidacion(
+  String negocioId,
+  HistoriaRestaurante historia,
+) async {
+  // Validate required fields
+  if (historia.titulo.trim().isEmpty) {
+    throw Exception('El título es obligatorio');
+  }
+  
+  if (historia.parrafosHistoria.isEmpty) {
+    throw Exception('Debe incluir al menos un párrafo');
+  }
+  
+  // Validate paragraph length
+  for (final parrafo in historia.parrafosHistoria) {
+    if (parrafo.length < 50) {
+      throw Exception('Los párrafos deben tener al menos 50 caracteres');
+    }
+  }
+  
+  // Validate specialties
+  for (final especialidad in historia.especialidades) {
+    if (especialidad.nombre.trim().isEmpty) {
+      throw Exception('Todas las especialidades deben tener nombre');
+    }
+  }
+  
+  return await repositorio.guardarHistoria(negocioId, historia);
+}
+```
+
+---
+
+## See Also
+
+- [NegocioRepositorio](/api/repositories/negocio-repositorio) - Restaurant business information (name, address, etc.)
+- Restaurant website documentation - How to display story content in the public-facing site

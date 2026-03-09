@@ -1,0 +1,595 @@
+---
+title: 'Checking Availability'
+description: 'Learn how to search for available tables by zone, date, time, and party size'
+icon: 'calendar-search'
+---
+
+## Overview
+
+The availability system allows you to search for tables based on multiple criteria including zone, date, time, and party size. The system automatically finds the best available table matching your requirements.
+
+## Search Criteria
+
+### Zone Selection
+
+Zones represent different dining areas in the restaurant. Each zone has distinct characteristics:
+
+<CardGroup cols={2}>
+  <Card title="Terraza" icon="umbrella-beach" color="#E67E22">
+    Outdoor terrace dining area
+  </Card>
+  <Card title="Salón" icon="chair" color="#3498DB">
+    Main indoor dining room
+  </Card>
+  <Card title="Jardín" icon="leaf" color="#27AE60">
+    Garden seating area
+  </Card>
+  <Card title="Bar" icon="martini-glass" color="#9B59B6">
+    Bar area seating
+  </Card>
+  <Card title="VIP" icon="star" color="#F1C40F">
+    VIP/private dining area
+  </Card>
+</CardGroup>
+
+```dart
+// Zone selection implementation
+Widget _buildSelectorZona() {
+  return BlocBuilder<DisponibilidadCubit, DisponibilidadState>(
+    builder: (context, state) {
+      // Get all zones configured for the restaurant
+      Set<String> zonas = {};
+      if (state is DisponibilidadExitosa) {
+        // Get ALL zones registered in the business
+        if (state.negocio != null && state.negocio!.zonas.isNotEmpty) {
+          zonas = state.negocio!.zonas.toSet();
+        } else {
+          // Fallback: get zones from available tables
+          zonas = state.mesasDisponibles.map((m) => m.zona).toSet();
+        }
+      }
+
+      return Card(
+        child: DropdownButton<String>(
+          value: _zonaSeleccionada,
+          hint: const Text('Seleccionar zona'),
+          items: zonas.map((zona) {
+            return DropdownMenuItem<String>(
+              value: zona,
+              child: Row(
+                children: [
+                  Icon(_obtenerIconoZona(zona), color: _obtenerColorZona(zona)),
+                  SizedBox(width: 8),
+                  Text(zona),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: (zona) {
+            setState(() => _zonaSeleccionada = zona);
+          },
+        ),
+      );
+    },
+  );
+}
+
+IconData _obtenerIconoZona(String zona) {
+  final z = zona.toLowerCase();
+  if (z.contains('terraza')) return Icons.deck;
+  if (z.contains('salon') || z.contains('salón')) return Icons.chair;
+  if (z.contains('jardin') || z.contains('jardín')) return Icons.grass;
+  if (z.contains('bar')) return Icons.local_bar;
+  if (z.contains('vip')) return Icons.star;
+  return Icons.table_restaurant;
+}
+
+Color _obtenerColorZona(String zona) {
+  final z = zona.toLowerCase();
+  if (z.contains('terraza')) return const Color(0xFFE67E22);
+  if (z.contains('salon') || z.contains('salón')) return const Color(0xFF3498DB);
+  if (z.contains('jardin') || z.contains('jardín')) return const Color(0xFF27AE60);
+  if (z.contains('bar')) return const Color(0xFF9B59B6);
+  if (z.contains('vip')) return const Color(0xFFF1C40F);
+  return Colors.grey;
+}
+```
+
+<Note>
+  The system loads all zones configured for the restaurant, even if they don't currently have tables assigned. This ensures customers see all available dining areas.
+</Note>
+
+### Date Selection
+
+Customers can select dates up to 14 days in advance:
+
+```dart
+Widget _buildSelectorFecha() {
+  return Card(
+    child: ListTile(
+      leading: const Icon(Icons.calendar_today, color: Color(0xFF3498DB)),
+      title: const Text('Fecha', style: TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(
+        _fechaSeleccionada == null
+            ? 'Seleccionar fecha'
+            : '${_fechaSeleccionada!.day}/${_fechaSeleccionada!.month}/${_fechaSeleccionada!.year}',
+      ),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+      onTap: () async {
+        final fecha = await showDatePicker(
+          context: context,
+          initialDate: DateTime.now(),
+          firstDate: DateTime.now(),           // Can't book in the past
+          lastDate: DateTime.now().add(const Duration(days: 14)),  // 14 days ahead
+        );
+        if (fecha != null) {
+          setState(() {
+            _fechaSeleccionada = fecha;
+            _intervaloSeleccionado = null;  // Clear time selection
+            // Load available time slots for the selected date
+            _intervalosFuture = context
+                .read<DisponibilidadCubit>()
+                .obtenerIntervalosHorarioNegocio(fecha);
+          });
+        }
+      },
+    ),
+  );
+}
+```
+
+<Info>
+  When you select a new date, the time slot selection is automatically reset, and available time slots are reloaded based on the restaurant's hours for that specific date.
+</Info>
+
+### Time Slot Selection
+
+Time slots are generated based on:
+- Restaurant operating hours for the selected day
+- Configured interval duration (typically 60 minutes)
+- Existing reservations
+
+```dart
+Widget _buildSelectorHora() {
+  // Must select date first
+  if (_fechaSeleccionada == null) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Icon(Icons.access_time, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text('Selecciona primero una fecha',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+          ],
+        ),
+      ),
+    );
+  }
+
+  return Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.access_time, color: Color(0xFF3498DB)),
+              SizedBox(width: 12),
+              Text('Horarios Disponibles',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          BlocBuilder<DisponibilidadCubit, DisponibilidadState>(
+            builder: (context, state) {
+              int duracion = 60;
+              if (state is DisponibilidadExitosa) {
+                duracion = state.duracionPromedioMinutos;
+              } else if (state is MesaEncontrada) {
+                duracion = state.duracionPromedioMinutos;
+              }
+              return Text(
+                'Selecciona un horario (intervalos de $duracion minutos)',
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              );
+            },
+          ),
+          SizedBox(height: 16),
+          // Display available time slots
+          FutureBuilder<List<String>>(
+            future: _intervalosFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Center(child: CircularProgressIndicator());
+              }
+
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return Text('No hay horarios disponibles para esta fecha',
+                  style: TextStyle(color: Colors.grey[600]));
+              }
+
+              final intervalos = snapshot.data!;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: intervalos.map((intervalo) {
+                  final seleccionado = _intervaloSeleccionado == intervalo;
+                  return ChoiceChip(
+                    label: Text(intervalo),
+                    selected: seleccionado,
+                    onSelected: (selected) {
+                      setState(() {
+                        _intervaloSeleccionado = selected ? intervalo : null;
+                      });
+                    },
+                    selectedColor: const Color(0xFF27AE60),
+                    backgroundColor: Colors.grey[200],
+                    labelStyle: TextStyle(
+                      color: seleccionado ? Colors.white : Colors.black87,
+                      fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+```
+
+```dart
+// From disponibilidad_cubit.dart
+/// Get available time slots for a specific date
+Future<List<String>> obtenerIntervalosHorarioNegocio(DateTime fecha) async {
+  try {
+    final id = _negocioActual?.id ?? _negocioId;
+    if (id == null) return [];
+    
+    return await _horarioAperturaRepo.obtenerIntervalosDisponibles(
+      id,
+      fecha,
+      intervaloMinutos: _negocioActual?.duracionPromedioMinutos ?? 60,
+    );
+  } catch (e) {
+    return [];
+  }
+}
+```
+
+<Note>
+  Time slots are displayed as chips (e.g., "08:00 - 09:00", "09:00 - 10:00"). The interval duration is configured per restaurant and typically set to 60 minutes.
+</Note>
+
+### Party Size
+
+Select the number of people (1-20) using the increment/decrement buttons:
+
+```dart
+Widget _buildSelectorPersonas() {
+  return Card(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Icon(Icons.people, color: Color(0xFF3498DB)),
+          SizedBox(width: 16),
+          Text('Número de Personas:',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          Spacer(),
+          IconButton(
+            icon: Icon(Icons.remove_circle_outline),
+            color: Color(0xFF3498DB),
+            onPressed: () {
+              if (_numeroPersonas > 1) {
+                setState(() => _numeroPersonas--);
+              }
+            },
+          ),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Color(0xFF3498DB).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text('$_numeroPersonas',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          ),
+          IconButton(
+            icon: Icon(Icons.add_circle_outline),
+            color: Color(0xFF3498DB),
+            onPressed: () {
+              if (_numeroPersonas < 20) {
+                setState(() => _numeroPersonas++);
+              }
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+```
+
+## Searching for Tables
+
+### Search Button
+
+Once all criteria are selected, click the "Buscar Mesa Disponible" button:
+
+```dart
+Widget _buildBotonBuscar(BuildContext context) {
+  return SizedBox(
+    height: 55,
+    child: ElevatedButton.icon(
+      onPressed: () {
+        // Validate zone selection
+        if (_zonaSeleccionada == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Por favor selecciona una zona'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+
+        // Validate date and time
+        if (_fechaSeleccionada == null || _intervaloSeleccionado == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Por favor selecciona fecha y horario'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+
+        // Extract hour from interval (e.g., "08:00 - 09:00" -> 8)
+        final partes = _intervaloSeleccionado!.split(' - ');
+        final horaInicio = int.parse(partes[0].split(':')[0]);
+
+        final fechaHora = DateTime(
+          _fechaSeleccionada!.year,
+          _fechaSeleccionada!.month,
+          _fechaSeleccionada!.day,
+          horaInicio,
+          0,
+        );
+
+        // Search for available table in selected zone
+        context.read<DisponibilidadCubit>().buscarMesaEnZona(
+          zona: _zonaSeleccionada!,
+          fecha: _fechaSeleccionada!,
+          hora: fechaHora,
+          numeroPersonas: _numeroPersonas,
+        );
+      },
+      icon: Icon(Icons.search, size: 24),
+      label: Text('Buscar Mesa Disponible',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Color(0xFF3498DB),
+        foregroundColor: Colors.white,
+        elevation: 4,
+      ),
+    ),
+  );
+}
+```
+
+### Search Logic
+
+The system automatically finds the best available table:
+
+```dart
+// From disponibilidad_cubit.dart
+Future<void> buscarMesaEnZona({
+  required String zona,
+  required DateTime fecha,
+  required DateTime hora,
+  required int numeroPersonas,
+}) async {
+  try {
+    emit(DisponibilidadCargando());
+
+    final negocioId = _negocioActual?.id ?? _negocioId ?? 'default';
+    final mesa = await _mesaRepositorio.buscarMesaDisponibleEnZona(
+      zona: zona,
+      fecha: fecha,
+      hora: hora,
+      numeroPersonas: numeroPersonas,
+      negocioId: negocioId,
+    );
+
+    if (mesa == null) {
+      emit(DisponibilidadConError(
+        'No hay mesas disponibles en $zona para $numeroPersonas personas en ese horario.\n\n'
+        'Intenta con otra zona o un horario diferente.',
+      ));
+    } else {
+      // Emit state with found table and duration
+      emit(MesaEncontrada(
+        mesa,
+        zona,
+        _negocioActual?.duracionPromedioMinutos ?? 60,
+      ));
+    }
+  } catch (e) {
+    emit(DisponibilidadConError('Error al buscar mesa: ${e.toString()}'));
+  }
+}
+```
+
+<Info>
+  The search automatically finds a suitable table in the selected zone that:
+  - Is available at the requested date and time
+  - Can accommodate the specified party size
+  - Doesn't conflict with existing reservations
+</Info>
+
+## Search Results
+
+### Table Found
+
+When a table is found, you'll see a detailed card showing:
+
+```dart
+Widget _buildTarjetaMesaEncontrada(
+  Mesa mesa,
+  String zona,
+  DateTime? fecha,
+  String? intervaloSeleccionado,
+  int numeroPersonas,
+) {
+  return Card(
+    elevation: 4,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(color: _obtenerColorZona(zona), width: 2),
+    ),
+    child: Column(
+      children: [
+        // Header with zone information
+        Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _obtenerColorZona(zona).withOpacity(0.1),
+          ),
+          child: Row(
+            children: [
+              Icon(_obtenerIconoZona(zona), color: _obtenerColorZona(zona)),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text('¡Mesa encontrada!',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text('Zona: $zona'),
+                  ],
+                ),
+              ),
+              Icon(Icons.check_circle, color: Color(0xFF27AE60)),
+            ],
+          ),
+        ),
+        // Table details and reservation summary
+        Padding(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            children: [
+              // Table name and capacity
+              Row(
+                children: [
+                  Icon(Icons.table_restaurant),
+                  Text(mesa.nombre, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Text('Capacidad: ${mesa.capacidad} personas'),
+              // Reservation summary
+              Container(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    _buildItemResumen(Icons.calendar_today, 'Fecha',
+                      fecha != null ? '${fecha.day}/${fecha.month}/${fecha.year}' : '-'),
+                    _buildItemResumen(Icons.access_time, 'Horario',
+                      intervaloSeleccionado ?? '-'),
+                    _buildItemResumen(Icons.people, 'Personas', '$numeroPersonas'),
+                  ],
+                ),
+              ),
+              // Reserve button
+              ElevatedButton.icon(
+                onPressed: () {
+                  _showConfirmarReservaDialog(context, mesa, fecha!,
+                    intervaloSeleccionado!, numeroPersonas);
+                },
+                icon: Icon(Icons.check),
+                label: Text('Reservar Esta Mesa'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF27AE60),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+```
+
+### No Tables Available
+
+If no tables match your criteria:
+
+```dart
+Widget _buildErrorCard(String message) {
+  final esErrorHorario = message.toLowerCase().contains('horario') ||
+      message.toLowerCase().contains('cerrado');
+
+  return Card(
+    elevation: 3,
+    color: esErrorHorario ? Colors.orange.shade50 : Colors.red.shade50,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(
+        color: esErrorHorario ? Colors.orange.shade300 : Colors.red.shade300,
+        width: 2,
+      ),
+    ),
+    child: Padding(
+      padding: EdgeInsets.all(24.0),
+      child: Column(
+        children: [
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: esErrorHorario ? Colors.orange.shade100 : Colors.red.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              esErrorHorario ? Icons.access_time_filled : Icons.error_outline,
+              color: esErrorHorario ? Colors.orange.shade700 : Colors.red.shade700,
+              size: 40,
+            ),
+          ),
+          SizedBox(height: 16),
+          Text(
+            esErrorHorario ? 'Horario No Disponible' : 'Error',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center),
+        ],
+      ),
+    ),
+  );
+}
+```
+
+<Note>
+  Errors are color-coded:
+  - **Orange**: Scheduling issues (no tables available, restaurant closed)
+  - **Red**: System errors
+</Note>
+
+## Tips for Better Results
+
+<CardGroup cols={2}>
+  <Card title="Be Flexible" icon="shuffle">
+    Try different zones or time slots if your first choice isn't available
+  </Card>
+  <Card title="Book Early" icon="clock">
+    Popular time slots fill up quickly - book as far in advance as possible
+  </Card>
+  <Card title="Off-Peak Hours" icon="calendar-days">
+    Consider lunch or early dinner times for better availability
+  </Card>
+  <Card title="Check Multiple Dates" icon="calendar-week">
+    If one date is full, try adjacent dates
+  </Card>
+</CardGroup>

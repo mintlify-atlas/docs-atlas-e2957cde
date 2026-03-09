@@ -1,0 +1,635 @@
+---
+title: Testing
+description: Testing strategies and examples for the restaurant reservation system
+---
+
+## Overview
+
+Comprehensive testing ensures the Restaurant Reservation System is reliable, maintainable, and bug-free. This guide covers unit tests, widget tests, integration tests, and Firebase testing strategies.
+
+## Testing Stack
+
+The project uses these testing packages:
+
+```yaml pubspec.yaml
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  bloc_test: ^9.1.0        # Test Cubits/Blocs
+  mocktail: ^1.0.0         # Mocking dependencies
+  fake_cloud_firestore: ^2.4.0  # Mock Firestore
+  firebase_auth_mocks: ^0.13.0  # Mock Firebase Auth
+```
+
+Install dependencies:
+```bash
+flutter pub get
+```
+
+## Unit Testing
+
+### Testing Use Cases
+
+Test business logic in isolation:
+
+```dart test/aplicacion/crear_reserva_test.dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:app_restaurante/aplicacion/crear_reserva.dart';
+import 'package:app_restaurante/dominio/entidades/reserva.dart';
+import 'package:app_restaurante/dominio/repositorios/reserva_repositorio.dart';
+
+// Create mocks
+class MockReservaRepositorio extends Mock implements ReservaRepositorio {}
+class MockMesaRepositorio extends Mock implements MesaRepositorio {}
+class MockNegocioRepositorio extends Mock implements NegocioRepositorio {}
+
+void main() {
+  late CrearReserva crearReserva;
+  late MockReservaRepositorio mockReservaRepo;
+  late MockMesaRepositorio mockMesaRepo;
+  late MockNegocioRepositorio mockNegocioRepo;
+
+  setUp(() {
+    mockReservaRepo = MockReservaRepositorio();
+    mockMesaRepo = MockMesaRepositorio();
+    mockNegocioRepo = MockNegocioRepositorio();
+    
+    crearReserva = CrearReserva(
+      mockReservaRepo,
+      mesaRepositorio: mockMesaRepo,
+      negocioRepositorio: mockNegocioRepo,
+    );
+  });
+
+  group('CrearReserva', () {
+    test('should create reservation successfully when all validations pass', () async {
+      // Arrange
+      final fecha = DateTime.now().add(Duration(days: 1));
+      final hora = DateTime(fecha.year, fecha.month, fecha.day, 20, 0);
+      
+      final mesa = Mesa(
+        id: 'mesa1',
+        nombre: 'Mesa VIP-1',
+        capacidad: 4,
+        zona: 'VIP',
+        negocioId: 'negocio1',
+      );
+      
+      final negocio = Negocio(
+        id: 'negocio1',
+        nombre: 'Mi Restaurante',
+        duracionPromedioMinutos: 60,
+        maxDiasAnticipacionReserva: 14,
+      );
+      
+      when(() => mockMesaRepo.obtenerMesaPorId('mesa1'))
+        .thenAnswer((_) async => mesa);
+      
+      when(() => mockNegocioRepo.obtenerNegocioPorId('negocio1'))
+        .thenAnswer((_) async => negocio);
+      
+      when(() => mockReservaRepo.mesaDisponible(
+        mesaId: any(named: 'mesaId'),
+        fecha: any(named: 'fecha'),
+        hora: any(named: 'hora'),
+        duracionMinutos: any(named: 'duracionMinutos'),
+      )).thenAnswer((_) async => true);
+      
+      when(() => mockReservaRepo.crearReserva(any()))
+        .thenAnswer((invocation) async {
+          final reserva = invocation.positionalArguments[0] as Reserva;
+          return reserva.copyWith(id: 'reserva123');
+        });
+
+      // Act
+      final resultado = await crearReserva.ejecutar(
+        'mesa1',
+        fecha,
+        hora,
+        4,
+        contactoCliente: 'cliente@example.com',
+        nombreCliente: 'Juan Pérez',
+        negocioId: 'negocio1',
+      );
+
+      // Assert
+      expect(resultado.id, 'reserva123');
+      expect(resultado.mesaId, 'mesa1');
+      expect(resultado.numeroPersonas, 4);
+      verify(() => mockReservaRepo.crearReserva(any())).called(1);
+    });
+
+    test('should throw exception when date is in the past', () async {
+      // Arrange
+      final fecha = DateTime.now().subtract(Duration(days: 1));
+      final hora = DateTime(fecha.year, fecha.month, fecha.day, 20, 0);
+
+      // Act & Assert
+      expect(
+        () => crearReserva.ejecutar(
+          'mesa1',
+          fecha,
+          hora,
+          4,
+          negocioId: 'negocio1',
+        ),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('should throw exception when table is not available', () async {
+      // Arrange
+      final fecha = DateTime.now().add(Duration(days: 1));
+      final hora = DateTime(fecha.year, fecha.month, fecha.day, 20, 0);
+      
+      when(() => mockMesaRepo.obtenerMesaPorId(any()))
+        .thenAnswer((_) async => Mesa(
+          id: 'mesa1',
+          nombre: 'Mesa 1',
+          capacidad: 4,
+          zona: 'Salón',
+          negocioId: 'negocio1',
+        ));
+      
+      when(() => mockReservaRepo.mesaDisponible(
+        mesaId: any(named: 'mesaId'),
+        fecha: any(named: 'fecha'),
+        hora: any(named: 'hora'),
+        duracionMinutos: any(named: 'duracionMinutos'),
+      )).thenAnswer((_) async => false);
+
+      // Act & Assert
+      expect(
+        () => crearReserva.ejecutar(
+          'mesa1',
+          fecha,
+          hora,
+          4,
+          negocioId: 'negocio1',
+        ),
+        throwsA(predicate((e) => 
+          e is Exception && 
+          e.toString().contains('ya está reservada')
+        )),
+      );
+    });
+  });
+}
+```
+
+### Testing Repositories
+
+Test Firestore adapters with fake Firestore:
+
+```dart test/adaptadores/adaptador_firestore_reserva_test.dart
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:app_restaurante/adaptadores/adaptador_firestore_reserva.dart';
+import 'package:app_restaurante/dominio/entidades/reserva.dart';
+
+void main() {
+  late FakeFirebaseFirestore fakeFirestore;
+  late ReservaRepositorioFirestore repositorio;
+
+  setUp(() {
+    fakeFirestore = FakeFirebaseFirestore();
+    repositorio = ReservaRepositorioFirestore(firestore: fakeFirestore);
+  });
+
+  group('ReservaRepositorioFirestore', () {
+    test('should create a reservation in Firestore', () async {
+      // Arrange
+      final reserva = Reserva(
+        id: '',
+        mesaId: 'mesa1',
+        fechaHora: DateTime(2024, 12, 25, 20, 0),
+        numeroPersonas: 4,
+        duracionMinutos: 60,
+        estado: EstadoReserva.confirmada,
+        contactoCliente: 'cliente@example.com',
+        nombreCliente: 'María García',
+        negocioId: 'negocio1',
+      );
+
+      // Act
+      final resultado = await repositorio.crearReserva(reserva);
+
+      // Assert
+      expect(resultado.id, isNotEmpty);
+      
+      // Verify in Firestore
+      final snapshot = await fakeFirestore.collection('reservas').get();
+      expect(snapshot.docs.length, 1);
+      expect(snapshot.docs.first.data()['mesaId'], 'mesa1');
+      expect(snapshot.docs.first.data()['numeroPersonas'], 4);
+    });
+
+    test('should retrieve reservations by table and date', () async {
+      // Arrange
+      final fecha = DateTime(2024, 12, 25);
+      
+      await fakeFirestore.collection('reservas').add({
+        'mesaId': 'mesa1',
+        'fechaHora': Timestamp.fromDate(DateTime(2024, 12, 25, 20, 0)),
+        'numeroPersonas': 4,
+        'estado': 'confirmada',
+        'duracionMinutos': 60,
+      });
+      
+      await fakeFirestore.collection('reservas').add({
+        'mesaId': 'mesa1',
+        'fechaHora': Timestamp.fromDate(DateTime(2024, 12, 25, 21, 0)),
+        'numeroPersonas': 2,
+        'estado': 'confirmada',
+        'duracionMinutos': 60,
+      });
+
+      // Act
+      final reservas = await repositorio.obtenerReservasPorMesaYHorario(
+        mesaId: 'mesa1',
+        fecha: fecha,
+        hora: DateTime(2024, 12, 25, 20, 0),
+      );
+
+      // Assert
+      expect(reservas.length, 2);
+      expect(reservas.every((r) => r.mesaId == 'mesa1'), true);
+    });
+  });
+}
+```
+
+## Testing Cubits
+
+Use `bloc_test` package to test state emissions:
+
+```dart test/presentacion/disponibilidad_cubit_test.dart
+import 'package:bloc_test/bloc_test.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:app_restaurante/presentacion/disponibilidad/disponibilidad_cubit.dart';
+import 'package:app_restaurante/presentacion/disponibilidad/disponibilidad_estados_de_cubit.dart';
+
+class MockMesaRepositorio extends Mock implements MesaRepositorio {}
+class MockNegocioRepositorio extends Mock implements NegocioRepositorio {}
+class MockCrearReserva extends Mock implements CrearReserva {}
+
+void main() {
+  late MockMesaRepositorio mockMesaRepo;
+  late MockNegocioRepositorio mockNegocioRepo;
+  late MockCrearReserva mockCrearReserva;
+
+  setUp(() {
+    mockMesaRepo = MockMesaRepositorio();
+    mockNegocioRepo = MockNegocioRepositorio();
+    mockCrearReserva = MockCrearReserva();
+  });
+
+  group('DisponibilidadCubit', () {
+    test('initial state is DisponibilidadInicial', () {
+      final cubit = DisponibilidadCubit(
+        mesaRepositorio: mockMesaRepo,
+        negocioRepositorio: mockNegocioRepo,
+        crearReserva: mockCrearReserva,
+      );
+      
+      expect(cubit.state, isA<DisponibilidadInicial>());
+    });
+
+    blocTest<DisponibilidadCubit, DisponibilidadState>(
+      'emits [Cargando, Exitosa] when cargarTodasLasMesas succeeds',
+      build: () {
+        when(() => mockMesaRepo.obtenerMesasPorNegocio(any()))
+          .thenAnswer((_) async => [
+            Mesa(id: '1', nombre: 'Mesa 1', capacidad: 4, zona: 'Salón', negocioId: 'n1'),
+            Mesa(id: '2', nombre: 'Mesa 2', capacidad: 2, zona: 'Terraza', negocioId: 'n1'),
+          ]);
+        
+        when(() => mockNegocioRepo.obtenerNegocioPorId(any()))
+          .thenAnswer((_) async => Negocio(
+            id: 'n1',
+            nombre: 'Mi Restaurante',
+            duracionPromedioMinutos: 60,
+          ));
+        
+        return DisponibilidadCubit(
+          mesaRepositorio: mockMesaRepo,
+          negocioRepositorio: mockNegocioRepo,
+          crearReserva: mockCrearReserva,
+        );
+      },
+      act: (cubit) => cubit.cargarTodasLasMesas('n1'),
+      expect: () => [
+        isA<DisponibilidadCargando>(),
+        isA<DisponibilidadExitosa>()
+          .having((s) => s.mesasDisponibles.length, 'mesa count', 2),
+      ],
+      verify: (_) {
+        verify(() => mockMesaRepo.obtenerMesasPorNegocio('n1')).called(1);
+        verify(() => mockNegocioRepo.obtenerNegocioPorId('n1')).called(1);
+      },
+    );
+
+    blocTest<DisponibilidadCubit, DisponibilidadState>(
+      'emits [Cargando, Error] when repository throws error',
+      build: () {
+        when(() => mockMesaRepo.obtenerMesasPorNegocio(any()))
+          .thenThrow(Exception('Network error'));
+        
+        return DisponibilidadCubit(
+          mesaRepositorio: mockMesaRepo,
+          negocioRepositorio: mockNegocioRepo,
+          crearReserva: mockCrearReserva,
+        );
+      },
+      act: (cubit) => cubit.cargarTodasLasMesas('n1'),
+      expect: () => [
+        isA<DisponibilidadCargando>(),
+        isA<DisponibilidadConError>()
+          .having((s) => s.mensaje, 'error message', contains('Network error')),
+      ],
+    );
+  });
+}
+```
+
+## Widget Testing
+
+Test UI components in isolation:
+
+```dart test/widgets/tarjeta_mesa_test.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:app_restaurante/presentacion/widgets_comunes/tarjeta_mesa.dart';
+
+void main() {
+  testWidgets('TarjetaMesa displays table information', (tester) async {
+    // Arrange
+    final mesa = Mesa(
+      id: '1',
+      nombre: 'Mesa VIP-1',
+      capacidad: 4,
+      zona: 'VIP',
+      negocioId: 'n1',
+    );
+
+    // Act
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TarjetaMesa(mesa: mesa),
+        ),
+      ),
+    );
+
+    // Assert
+    expect(find.text('Mesa VIP-1'), findsOneWidget);
+    expect(find.text('Capacidad: 4'), findsOneWidget);
+    expect(find.text('VIP'), findsOneWidget);
+  });
+
+  testWidgets('TarjetaMesa calls onTap when tapped', (tester) async {
+    // Arrange
+    bool wasTapped = false;
+    final mesa = Mesa(
+      id: '1',
+      nombre: 'Mesa 1',
+      capacidad: 2,
+      zona: 'Salón',
+      negocioId: 'n1',
+    );
+
+    // Act
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TarjetaMesa(
+            mesa: mesa,
+            onTap: () => wasTapped = true,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TarjetaMesa));
+    await tester.pump();
+
+    // Assert
+    expect(wasTapped, true);
+  });
+}
+```
+
+## Integration Testing
+
+Test complete flows:
+
+```dart integration_test/reserva_flow_test.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:app_restaurante/main.dart' as app;
+
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  group('Reservation Flow', () {
+    testWidgets('Complete reservation creation flow', (tester) async {
+      // Start app
+      app.main();
+      await tester.pumpAndSettle();
+
+      // Navigate to availability screen
+      await tester.tap(find.text('Hacer Reserva'));
+      await tester.pumpAndSettle();
+
+      // Select date
+      await tester.tap(find.byIcon(Icons.calendar_today));
+      await tester.pumpAndSettle();
+      
+      // Select tomorrow's date
+      final tomorrow = DateTime.now().add(Duration(days: 1));
+      await tester.tap(find.text(tomorrow.day.toString()));
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      // Select table
+      await tester.tap(find.text('Mesa VIP-1').first);
+      await tester.pumpAndSettle();
+
+      // Fill customer information
+      await tester.enterText(
+        find.byType(TextField).first,
+        'Juan Pérez',
+      );
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'juan@example.com',
+      );
+
+      // Submit reservation
+      await tester.tap(find.text('Confirmar Reserva'));
+      await tester.pumpAndSettle(Duration(seconds: 3));
+
+      // Verify success message
+      expect(find.text('Reserva confirmada'), findsOneWidget);
+    });
+  });
+}
+```
+
+Run integration tests:
+```bash
+flutter test integration_test/reserva_flow_test.dart
+```
+
+## Test Coverage
+
+Generate coverage report:
+
+```bash
+# Run tests with coverage
+flutter test --coverage
+
+# Generate HTML report (requires lcov)
+genhtml coverage/lcov.info -o coverage/html
+
+# Open report
+open coverage/html/index.html
+```
+
+<Tip>
+  Aim for **80%+ code coverage** on business logic (use cases, repositories, cubits).
+</Tip>
+
+## Mocking Firebase Services
+
+### Mock Firebase Auth
+
+```dart
+import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
+
+final mockAuth = MockFirebaseAuth(
+  mockUser: MockUser(
+    uid: 'user123',
+    email: 'test@example.com',
+    displayName: 'Test User',
+  ),
+);
+
+final user = await mockAuth.signInWithEmailAndPassword(
+  email: 'test@example.com',
+  password: 'password123',
+);
+
+expect(user.user?.uid, 'user123');
+```
+
+### Mock Firestore
+
+```dart
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+
+final fakeFirestore = FakeFirebaseFirestore();
+
+// Add test data
+await fakeFirestore.collection('reservas').add({
+  'mesaId': 'mesa1',
+  'numeroPersonas': 4,
+});
+
+// Query data
+final snapshot = await fakeFirestore.collection('reservas').get();
+expect(snapshot.docs.length, 1);
+```
+
+## Best Practices
+
+### Test Organization
+
+```
+test/
+├── aplicacion/              # Use case tests
+│   ├── crear_reserva_test.dart
+│   └── cancelar_reserva_test.dart
+├── adaptadores/             # Repository tests
+│   ├── adaptador_firestore_reserva_test.dart
+│   └── servicio_email_test.dart
+├── presentacion/            # Cubit tests
+│   ├── disponibilidad_cubit_test.dart
+│   └── pantalla_dueno_cubit_test.dart
+├── widgets/                 # Widget tests
+│   └── tarjeta_mesa_test.dart
+└── integration_test/        # Integration tests
+    └── reserva_flow_test.dart
+```
+
+### Testing Checklist
+
+- ✅ Test happy path (success scenarios)
+- ✅ Test error cases (failures, exceptions)
+- ✅ Test edge cases (empty lists, null values)
+- ✅ Test validation logic
+- ✅ Mock external dependencies (Firebase, APIs)
+- ✅ Verify state emissions in correct order
+- ✅ Check that repositories are called with correct parameters
+- ✅ Test widget rendering and interactions
+
+### Common Pitfalls
+
+<Warning>
+  Don't forget to call `registerFallbackValue()` for complex types when using Mocktail!
+</Warning>
+
+```dart
+setUpAll(() {
+  registerFallbackValue(Reserva(
+    id: '',
+    mesaId: '',
+    fechaHora: DateTime.now(),
+    numeroPersonas: 1,
+    duracionMinutos: 60,
+    estado: EstadoReserva.pendiente,
+    negocioId: '',
+  ));
+});
+```
+
+## Continuous Integration
+
+Add to `.github/workflows/test.yml`:
+
+```yaml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.7.2'
+      
+      - name: Install dependencies
+        run: flutter pub get
+      
+      - name: Run tests
+        run: flutter test --coverage
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: coverage/lcov.info
+```
+
+## Next Steps
+
+- [Firebase Setup](/guides/firebase-setup) - Configure Firebase for testing
+- [State Management](/guides/state-management) - Understand BLoC patterns
+- [Email Configuration](/guides/email-configuration) - Test email flows

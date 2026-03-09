@@ -1,0 +1,239 @@
+---
+title: 'CancelarReserva'
+description: 'Use case for canceling reservations with different rules for customers and administrators'
+---
+
+## Overview
+
+The `CancelarReserva` use case handles reservation cancellations with two distinct execution paths:
+- **Customer cancellation** (`ejecutar`): Subject to minimum cancellation notice requirements
+- **Administrator cancellation** (`ejecutarComoAdmin`): No time restrictions, can include cancellation reason
+
+Both methods send appropriate email notifications to affected parties.
+
+## Constructor
+
+```dart
+CancelarReserva(
+  ReservaRepositorio reservaRepositorio, {
+  NegocioRepositorio? negocioRepositorio,
+  MesaRepositorio? mesaRepositorio,
+  ServicioEmail? servicioEmail,
+})
+```
+
+### Dependencies
+
+<ParamField path="reservaRepositorio" type="ReservaRepositorio" required>
+  Repository for managing reservation data and cancellation operations
+</ParamField>
+
+<ParamField path="negocioRepositorio" type="NegocioRepositorio" optional>
+  Repository for business configuration. Used to get minimum cancellation hours and business details for notifications
+</ParamField>
+
+<ParamField path="mesaRepositorio" type="MesaRepositorio" optional>
+  Repository for table data. Used to get table names for email notifications
+</ParamField>
+
+<ParamField path="servicioEmail" type="ServicioEmail" optional>
+  Email service for sending cancellation notifications
+</ParamField>
+
+## ejecutar() Method
+
+Cancels a reservation on behalf of the customer with validation of cancellation policies.
+
+```dart
+Future<void> ejecutar(
+  String reservaId, {
+  required String negocioId,
+})
+```
+
+### Parameters
+
+<ParamField path="reservaId" type="String" required>
+  Unique identifier of the reservation to cancel
+</ParamField>
+
+<ParamField path="negocioId" type="String" required>
+  Unique identifier of the restaurant business
+</ParamField>
+
+### Return Value
+
+Returns `Future<void>`. The method completes successfully if cancellation succeeds, or throws an exception if validation fails.
+
+### Validation Logic
+
+Performs the following validations:
+
+#### 1. Reservation Existence
+- Validates that the reservation exists in the system
+- **Exception**: `'Reserva no encontrada'`
+
+#### 2. Reservation State
+- Only `confirmada` (confirmed) or `pendiente` (pending) reservations can be canceled
+- **Exception**: `'Solo se pueden cancelar reservas confirmadas o pendientes.'`
+
+#### 3. Past Reservation
+- Cannot cancel a reservation whose time has already passed
+- **Exception**: `'No se puede cancelar una reserva cuya hora ya pasó.'`
+
+#### 4. Minimum Cancellation Notice
+- Must cancel with the configured minimum advance notice (default: 24 hours)
+- **Exception**: `'Solo se puede cancelar con {minHorasParaCancelar} horas de anticipación.'`
+
+### Email Notifications
+
+Sends cancellation emails to:
+- Customer who made the reservation
+- Restaurant owner (if email configured)
+
+Uses `servicioEmail.notificarReservaCanceladaPorCliente()`.
+
+### Usage Example
+
+```dart
+// Initialize repositories
+final reservaRepo = FirebaseReservaRepositorio();
+final negocioRepo = FirebaseNegocioRepositorio();
+final mesaRepo = FirebaseMesaRepositorio();
+final emailService = SendGridEmailService();
+
+// Create use case instance
+final cancelarReserva = CancelarReserva(
+  reservaRepo,
+  negocioRepositorio: negocioRepo,
+  mesaRepositorio: mesaRepo,
+  servicioEmail: emailService,
+);
+
+// Customer cancels their reservation
+try {
+  await cancelarReserva.ejecutar(
+    'reserva-123',
+    negocioId: 'negocio-001',
+  );
+  print('Reserva cancelada exitosamente');
+} on Exception catch (e) {
+  if (e.toString().contains('anticipación')) {
+    print('Error: No se puede cancelar. Comuníquese con el restaurante.');
+  } else {
+    print('Error: ${e.toString()}');
+  }
+}
+```
+
+## ejecutarComoAdmin() Method
+
+Cancels a reservation on behalf of the restaurant administrator without time restrictions.
+
+```dart
+Future<void> ejecutarComoAdmin(
+  String reservaId, {
+  required String negocioId,
+  String? motivo,
+})
+```
+
+### Parameters
+
+<ParamField path="reservaId" type="String" required>
+  Unique identifier of the reservation to cancel
+</ParamField>
+
+<ParamField path="negocioId" type="String" required>
+  Unique identifier of the restaurant business
+</ParamField>
+
+<ParamField path="motivo" type="String" optional>
+  Reason for cancellation to include in customer notification email
+</ParamField>
+
+### Return Value
+
+Returns `Future<void>`. The method completes successfully if cancellation succeeds, or throws an exception if the reservation doesn't exist.
+
+### Validation Logic
+
+Performs minimal validation:
+
+#### 1. Reservation Existence
+- Validates that the reservation exists in the system
+- **Exception**: `'Reserva no encontrada'`
+
+**Note**: Unlike customer cancellation, administrator cancellation:
+- Has no time restrictions (can cancel past reservations)
+- Has no state restrictions (can cancel any reservation)
+- Has no minimum notice period
+
+### Email Notifications
+
+Sends notification email to:
+- Customer who made the reservation (informing them the restaurant canceled)
+
+Uses `servicioEmail.notificarReservaCanceladaPorRestaurante()` with optional cancellation reason.
+
+### Usage Example
+
+```dart
+// Administrator cancels a reservation
+try {
+  await cancelarReserva.ejecutarComoAdmin(
+    'reserva-123',
+    negocioId: 'negocio-001',
+    motivo: 'Cierre temporal por evento privado',
+  );
+  print('Reserva cancelada por el restaurante');
+} on Exception catch (e) {
+  print('Error: ${e.toString()}');
+}
+```
+
+## Error Handling
+
+Both methods throw `Exception` objects with descriptive Spanish messages. Always use try-catch:
+
+```dart
+try {
+  await cancelarReserva.ejecutar(
+    reservaId,
+    negocioId: businessId,
+  );
+  // Show success message to customer
+} on Exception catch (e) {
+  final errorMsg = e.toString();
+  
+  if (errorMsg.contains('no encontrada')) {
+    // Reservation doesn't exist
+    showError('Esta reserva ya no existe');
+  } else if (errorMsg.contains('anticipación')) {
+    // Too late to cancel
+    showError('Tiempo de cancelación expirado. Contacte al restaurante.');
+  } else if (errorMsg.contains('ya pasó')) {
+    // Past reservation
+    showError('No se pueden cancelar reservas pasadas');
+  } else {
+    // Generic error
+    showError('Error al cancelar la reserva');
+  }
+}
+```
+
+## Comparison: Customer vs Admin Cancellation
+
+| Feature | `ejecutar()` (Customer) | `ejecutarComoAdmin()` (Admin) |
+|---------|------------------------|--------------------------------|
+| Time restrictions | Yes (min hours notice) | No |
+| State restrictions | Yes (only pending/confirmed) | No |
+| Can cancel past reservations | No | Yes |
+| Requires reason | No | Optional |
+| Email recipient | Customer + Owner | Customer only |
+| Email type | Canceled by customer | Canceled by restaurant |
+
+## Related Types
+
+- [EstadoReserva](/api/entities/reserva#estado-reserva) - Enum for reservation states
+- [Reserva](/api/entities/reserva) - Reservation entity

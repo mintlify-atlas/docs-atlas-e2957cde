@@ -1,0 +1,270 @@
+---
+title: 'ObtenerReserva'
+description: 'Use case for retrieving all reservations from the system'
+---
+
+## Overview
+
+The `ObtenerReserva` use case provides a simple interface to retrieve all reservations from the system. It handles errors gracefully by returning an empty list if the query fails.
+
+## Constructor
+
+```dart
+ObtenerReserva(ReservaRepositorio reservaRepositorio)
+```
+
+### Dependencies
+
+<ParamField path="reservaRepositorio" type="ReservaRepositorio" required>
+  Repository for querying reservation data
+</ParamField>
+
+## ejecutar() Method
+
+Retrieves all reservations from the repository.
+
+```dart
+Future<List<Reserva>> ejecutar()
+```
+
+### Parameters
+
+This method takes no parameters.
+
+### Return Value
+
+Returns a `Future<List<Reserva>>` containing:
+- All reservations in the system if the query succeeds
+- An empty list `[]` if an error occurs during retrieval
+
+### Error Handling
+
+This use case implements defensive error handling:
+- Catches any exceptions thrown by the repository
+- Returns an empty list instead of propagating the exception
+- Can be modified to throw exceptions by uncommenting the throw statement in the implementation
+
+## Usage Example
+
+### Basic Usage
+
+```dart
+// Initialize repository
+final reservaRepo = FirebaseReservaRepositorio();
+
+// Create use case instance
+final obtenerReserva = ObtenerReserva(reservaRepo);
+
+// Retrieve all reservations
+final reservas = await obtenerReserva.ejecutar();
+
+if (reservas.isEmpty) {
+  print('No hay reservas o ocurrió un error');
+} else {
+  print('Se encontraron ${reservas.length} reservas');
+  for (final reserva in reservas) {
+    print('- ${reserva.id}: ${reserva.nombreCliente} (${reserva.estado})');
+  }
+}
+```
+
+### Filtering Reservations
+
+Since this method returns all reservations, you typically need to filter them based on your needs:
+
+```dart
+final reservas = await obtenerReserva.ejecutar();
+
+// Filter by date
+final hoy = DateTime.now();
+final reservasHoy = reservas.where((r) => 
+  r.fechaHora.year == hoy.year &&
+  r.fechaHora.month == hoy.month &&
+  r.fechaHora.day == hoy.day
+).toList();
+
+// Filter by state
+final reservasConfirmadas = reservas.where((r) => 
+  r.estado == EstadoReserva.confirmada
+).toList();
+
+// Filter by business
+final reservasNegocio = reservas.where((r) => 
+  r.negocioId == 'negocio-001'
+).toList();
+
+// Filter by table
+final reservasMesa = reservas.where((r) => 
+  r.mesaId == 'mesa-001'
+).toList();
+```
+
+### Sorting Reservations
+
+```dart
+final reservas = await obtenerReserva.ejecutar();
+
+// Sort by date (ascending)
+reservas.sort((a, b) => a.fechaHora.compareTo(b.fechaHora));
+
+// Sort by date (descending - most recent first)
+reservas.sort((a, b) => b.fechaHora.compareTo(a.fechaHora));
+
+// Sort by number of people
+reservas.sort((a, b) => b.numeroPersonas.compareTo(a.numeroPersonas));
+```
+
+### Display in UI
+
+```dart
+class ReservationsPage extends StatefulWidget {
+  @override
+  _ReservationsPageState createState() => _ReservationsPageState();
+}
+
+class _ReservationsPageState extends State<ReservationsPage> {
+  late ObtenerReserva _obtenerReserva;
+  List<Reserva> _reservas = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _obtenerReserva = ObtenerReserva(getIt<ReservaRepositorio>());
+    _loadReservations();
+  }
+
+  Future<void> _loadReservations() async {
+    setState(() => _loading = true);
+    
+    final reservas = await _obtenerReserva.ejecutar();
+    
+    setState(() {
+      _reservas = reservas;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Center(child: CircularProgressIndicator());
+    }
+
+    if (_reservas.isEmpty) {
+      return Center(child: Text('No hay reservas'));
+    }
+
+    return ListView.builder(
+      itemCount: _reservas.length,
+      itemBuilder: (context, index) {
+        final reserva = _reservas[index];
+        return ListTile(
+          title: Text(reserva.nombreCliente ?? 'Cliente sin nombre'),
+          subtitle: Text(
+            '${_formatDate(reserva.fechaHora)} - ${reserva.numeroPersonas} personas'
+          ),
+          trailing: _buildStatusChip(reserva.estado),
+        );
+      },
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildStatusChip(EstadoReserva estado) {
+    Color color;
+    switch (estado) {
+      case EstadoReserva.confirmada:
+        color = Colors.green;
+        break;
+      case EstadoReserva.pendiente:
+        color = Colors.orange;
+        break;
+      case EstadoReserva.cancelada:
+        color = Colors.red;
+        break;
+    }
+    return Chip(
+      label: Text(estado.toString().split('.').last),
+      backgroundColor: color.withOpacity(0.2),
+    );
+  }
+}
+```
+
+## Implementation Notes
+
+### Current Behavior
+
+The current implementation returns an empty list on errors, which means:
+- **Advantage**: The UI won't crash if there's a database error
+- **Disadvantage**: You can't distinguish between "no reservations" and "error occurred"
+
+### Alternative Implementation
+
+If you need to handle errors explicitly, you can modify the use case to throw exceptions:
+
+```dart
+Future<List<Reserva>> ejecutar() async {
+  try {
+    return await reservaRepositorio.obtenerReserva();
+  } catch (e) {
+    throw Exception('Error al obtener reservas: $e');
+  }
+}
+```
+
+Then handle it in your UI:
+
+```dart
+try {
+  final reservas = await obtenerReserva.ejecutar();
+  // Display reservations
+} on Exception catch (e) {
+  // Show error message to user
+  showError('No se pudieron cargar las reservas');
+}
+```
+
+## Limitations
+
+This use case has some limitations to be aware of:
+
+1. **No Filtering**: Retrieves ALL reservations, which may be inefficient for large datasets
+2. **No Pagination**: All results returned at once
+3. **No Business Scope**: Returns reservations from all businesses
+4. **No Date Range**: Cannot limit to specific date ranges
+
+### Recommended Enhancements
+
+For production use, consider creating additional use cases or extending this one:
+
+```dart
+// Obtain reservations for a specific business
+Future<List<Reserva>> ejecutarPorNegocio(String negocioId)
+
+// Obtain reservations for a date range
+Future<List<Reserva>> ejecutarPorRangoFechas(
+  DateTime inicio,
+  DateTime fin,
+)
+
+// Obtain reservations by state
+Future<List<Reserva>> ejecutarPorEstado(
+  EstadoReserva estado,
+)
+
+// Obtain reservations with pagination
+Future<List<Reserva>> ejecutarConPaginacion(
+  int limite,
+  String? ultimoId,
+)
+```
+
+## Related Types
+
+- [Reserva](/api/entities/reserva) - Reservation entity
+- [EstadoReserva](/api/entities/reserva#estado-reserva) - Enum for reservation states

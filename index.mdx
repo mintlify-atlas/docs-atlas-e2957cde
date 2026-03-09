@@ -1,97 +1,175 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Restaurant Reservation System"
+description: "A full-stack Flutter application for restaurant table reservations with real-time availability, SMS verification, and comprehensive business management"
 ---
 
-## Setting up
+<Note>
+  Built with Flutter and Firebase, this system provides a complete solution for managing restaurant reservations with real-time availability checking, customer verification, and business owner administration.
+</Note>
 
-Get your documentation site up and running in minutes.
+## Get Started
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+Jump right in and start building with the Restaurant Reservation System.
 
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
+<CardGroup cols={2}>
   <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
   >
-    Edit your docs locally and preview them in real time.
+    Get up and running in minutes with our step-by-step guide
   </Card>
   <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
+    title="Installation"
+    icon="download"
+    href="/installation"
   >
-    Customize the design and colors of your site to match your brand.
+    Install and configure the system for development or production
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
+</CardGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card
+    title="Real-Time Availability"
+    icon="calendar-check"
   >
-    Organize your docs to help users find what they need and succeed with your product.
+    Check table availability in real-time with 1-hour interval booking slots
   </Card>
   <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
+    title="SMS Verification"
+    icon="mobile"
   >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
-
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+    Secure customer verification using Firebase Authentication SMS codes
   </Card>
   <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
+    title="Multi-Zone Tables"
+    icon="layer-group"
   >
-    Add sample code to demonstrate how to use your product.
+    Manage tables across different zones: Terrace, Salon, Garden, Bar, and VIP
   </Card>
   <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
+    title="Email Notifications"
+    icon="envelope"
   >
-    Display images and other media.
+    Automatic email confirmations and cancellation notices for customers and owners
   </Card>
   <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
+    title="Business Dashboard"
+    icon="chart-line"
   >
-    Write once and reuse across your docs.
+    Comprehensive admin panel for managing tables, reservations, and business settings
   </Card>
-</Columns>
+  <Card
+    title="Clean Architecture"
+    icon="diagram-project"
+  >
+    Built with Clean Architecture principles and Flutter BLoC state management
+  </Card>
+</CardGroup>
 
-## Need inspiration?
+## For Customers
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+Learn how to make and manage restaurant reservations.
+
+<CardGroup cols={2}>
+  <Card
+    title="Making Reservations"
+    icon="utensils"
+    href="/customers/making-reservations"
+  >
+    Step-by-step guide to booking a table at your favorite restaurant
+  </Card>
+  <Card
+    title="Checking Availability"
+    icon="search"
+    href="/customers/checking-availability"
+  >
+    Find available tables by zone, date, time, and party size
+  </Card>
+  <Card
+    title="Managing Reservations"
+    icon="list-check"
+    href="/customers/managing-reservations"
+  >
+    View, modify, and cancel your existing reservations
+  </Card>
+  <Card
+    title="SMS Verification"
+    icon="shield-check"
+    href="/customers/sms-verification"
+  >
+    Understand how identity verification protects your reservations
+  </Card>
+</CardGroup>
+
+## For Business Owners
+
+Complete tools for managing your restaurant's reservation system.
+
+<CardGroup cols={2}>
+  <Card
+    title="Admin Panel"
+    icon="gauge-high"
+    href="/owners/admin-panel"
+  >
+    Access and navigate your business management dashboard
+  </Card>
+  <Card
+    title="Table Management"
+    icon="table"
+    href="/owners/table-management"
+  >
+    Add, edit, and organize tables by capacity and zone
+  </Card>
+  <Card
+    title="Reservation Management"
+    icon="calendar-days"
+    href="/owners/reservation-management"
+  >
+    Confirm, cancel, and track all customer reservations
+  </Card>
+  <Card
+    title="Business Configuration"
+    icon="gear"
+    href="/owners/business-configuration"
+  >
+    Configure hours, cancellation policies, and reservation rules
+  </Card>
+</CardGroup>
+
+## Architecture & API
+
+Explore the technical implementation and API reference.
+
+<CardGroup cols={2}>
+  <Card
+    title="Architecture Overview"
+    icon="sitemap"
+    href="/architecture/overview"
+  >
+    Understand the Clean Architecture design and layer separation
+  </Card>
+  <Card
+    title="Domain Entities"
+    icon="cube"
+    href="/api/entities/reserva"
+  >
+    Core business entities: Reserva, Mesa, Negocio, and more
+  </Card>
+  <Card
+    title="Use Cases"
+    icon="gears"
+    href="/api/use-cases/crear-reserva"
+  >
+    Application layer use cases for creating and managing reservations
+  </Card>
+  <Card
+    title="State Management"
+    icon="arrows-spin"
+    href="/api/state/disponibilidad-cubit"
+  >
+    Flutter BLoC Cubits for managing application state
+  </Card>
+</CardGroup>
