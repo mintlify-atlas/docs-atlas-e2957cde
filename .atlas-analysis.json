@@ -1,0 +1,139 @@
+{
+  "projectType": "saas",
+  "projectName": "Restaurant Reservation System",
+  "projectDescription": "A full-stack Flutter application for restaurant table reservations with real-time availability, SMS verification, and business management features.",
+  "theme": "almond",
+  "primaryColor": "#3dcffc",
+  "lightColor": "#0b5b9c",
+  "darkColor": "#ffffff",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "For Customers",
+            "pages": [
+              "customers/making-reservations",
+              "customers/checking-availability",
+              "customers/managing-reservations",
+              "customers/sms-verification"
+            ]
+          },
+          {
+            "group": "For Business Owners",
+            "pages": [
+              "owners/admin-panel",
+              "owners/authentication",
+              "owners/table-management",
+              "owners/reservation-management",
+              "owners/business-configuration",
+              "owners/notifications"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/clean-architecture",
+              "architecture/domain-layer",
+              "architecture/application-layer",
+              "architecture/adapters-layer",
+              "architecture/presentation-layer"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/firebase-setup",
+              "guides/email-configuration",
+              "guides/state-management",
+              "guides/testing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Domain Entities",
+            "pages": [
+              "api/entities/reserva",
+              "api/entities/mesa",
+              "api/entities/negocio",
+              "api/entities/horario-apertura",
+              "api/entities/historia-restaurante"
+            ]
+          },
+          {
+            "group": "Use Cases",
+            "pages": [
+              "api/use-cases/crear-reserva",
+              "api/use-cases/cancelar-reserva",
+              "api/use-cases/obtener-reserva"
+            ]
+          },
+          {
+            "group": "Repositories",
+            "pages": [
+              "api/repositories/reserva-repositorio",
+              "api/repositories/mesa-repositorio",
+              "api/repositories/negocio-repositorio",
+              "api/repositories/horario-apertura-repositorio",
+              "api/repositories/historia-repositorio"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "api/services/autenticacion",
+              "api/services/email",
+              "api/services/verificacion-cliente"
+            ]
+          },
+          {
+            "group": "State Management",
+            "pages": [
+              "api/state/disponibilidad-cubit",
+              "api/state/mis-reservas-cubit",
+              "api/state/pantalla-dueno-cubit"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time table availability checking with 1-hour intervals",
+    "SMS verification for customer reservations via Firebase Auth",
+    "Multi-zone table management (Terrace, Salon, Garden, Bar, VIP)",
+    "Email notifications for confirmations and cancellations",
+    "Business owner admin panel with authentication",
+    "Configurable business hours and reservation rules",
+    "Clean Architecture with Flutter BLoC state management",
+    "Firebase backend with Firestore and Cloud Functions"
+  ],
+  "publicApiSurface": [
+    "CrearReserva.ejecutar() - Create a new reservation with validation",
+    "CancelarReserva.ejecutar() - Cancel an existing reservation",
+    "ObtenerReserva.ejecutar() - Get all reservations for a customer",
+    "ReservaRepositorio.mesaDisponible() - Check table availability",
+    "MesaRepositorio.buscarMesaDisponibleEnZona() - Find available tables by zone",
+    "NegocioRepositorio.autenticarNegocio() - Authenticate business owner",
+    "ServicioVerificacionCliente.enviarCodigoSMS() - Send SMS verification code",
+    "ServicioEmail.enviarReservaConfirmada() - Send confirmation email",
+    "HorarioAperturaRepositorio.estaAbiertoEn() - Check if restaurant is open",
+    "DisponibilidadCubit - State management for availability checking",
+    "MisReservasCubit - State management for customer reservations",
+    "PantallaDuenoCubit - State management for business owner panel"
+  ]
+}
